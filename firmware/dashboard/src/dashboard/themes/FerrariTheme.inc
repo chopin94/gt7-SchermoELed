@@ -590,27 +590,27 @@
         if (forceUpdate) prevSuggested = "";
 
         if (state.suggestedGear != prevSuggested) {
-            int rw = 38;
-            int rh = 54;
-            int cx = FERRARI_PANEL_X + FERRARI_PANEL_W + 4; // Right of panel
-            int cy = FERRARI_PANEL_Y + (FERRARI_PANEL_H - rh) / 2;
-            int r = 8;
-            
-            // clear background to erase previous
-            tft.fillRect(cx - 2, cy - 2, rw + 4, rh + 4, TFT_BLACK);
-            
+            // Riquadro nell'angolo in basso a destra del pannello della marcia,
+            // nello spazio libero a destra della marcia inserita (gear x FERRARI_GEAR_X - 12 + FERRARI_GEAR_W).
+            const int rw = 32;
+            const int rh = 44;
+            const int cx = FERRARI_PANEL_X + FERRARI_PANEL_W - rw - 4;
+            const int cy = FERRARI_PANEL_Y + FERRARI_PANEL_H - rh - 4;
+            const int r = 6;
+
+            // Cancella con il colore del pannello
+            tft.fillRect(cx, cy, rw, rh, ferrariYellow());
+
             if (state.suggestedGear != "") {
-                // Red rounded rectangle
                 tft.fillRoundRect(cx, cy, rw, rh, r, ferrariRed());
-                
-                // Gear number
-                float h = 36.0f;
-                float w = 22.0f;
-                float stroke = 7.0f;
-                float slant = 0.14f;
-                float x = cx + (rw - w) / 2.0f - (h * slant) / 2.0f + 1;
-                float y = cy + (rh - h) / 2.0f;
-                
+
+                const float h = 30.0f;
+                const float w = 17.0f;
+                const float stroke = 6.0f;
+                const float slant = 0.14f;
+                const float x = cx + (rw - w) / 2.0f - (h * slant) / 2.0f + 1;
+                const float y = cy + (rh - h) / 2.0f;
+
                 drawFerrariGlyph(tft, state.suggestedGear[0], x, y, w, h, stroke, slant, TFT_BLACK);
             }
             prevSuggested = state.suggestedGear;
