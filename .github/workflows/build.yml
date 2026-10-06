@@ -1,0 +1,73 @@
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    name: Schermo (${{ matrix.env }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [esp32-2432s024c, esp32, esp32-st7789]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-dashboard-${{ hashFiles('firmware/dashboard/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install platformio
+      - run: pio run -d firmware/dashboard -e ${{ matrix.env }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-schermo-${{ matrix.env }}
+          path: |
+            firmware/dashboard/.pio/build/${{ matrix.env }}/firmware.bin
+            firmware/dashboard/.pio/build/${{ matrix.env }}/bootloader.bin
+            firmware/dashboard/.pio/build/${{ matrix.env }}/partitions.bin
+
+  led-strip:
+    name: Striscia LED
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-led-${{ hashFiles('firmware/led-strip/platformio.ini') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install platformio
+      - run: pio run -d firmware/led-strip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-led-strip
+          path: |
+            firmware/led-strip/.pio/build/lolin_s2_mini/firmware.bin
+            firmware/led-strip/.pio/build/lolin_s2_mini/bootloader.bin
+            firmware/led-strip/.pio/build/lolin_s2_mini/partitions.bin
+
+  tests:
+    name: Test telemetria e screenshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --test firmware/dashboard/tests/simhub-formula.test.mjs
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/telemetry.cpp -o /tmp/telemetry-tests && /tmp/telemetry-tests
+      # Compila il simulatore dello schermo: verifica che temi e menu disegnino senza errori
+      - run: sudo apt-get install -y zlib1g-dev
+      - run: tools/screenshots/build.sh /tmp/screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: /tmp/screenshots
