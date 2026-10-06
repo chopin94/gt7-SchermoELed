@@ -11,7 +11,7 @@ Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 ![Temi](https://img.shields.io/badge/temi%20schermo-11-FFCC00)
 ![Temi LED](https://img.shields.io/badge/temi%20LED-6-22C55E)
 
-<img src="docs/screenshots/mosaico-temi.png" alt="Gli 11 temi del cruscotto e la schermata di attesa" width="100%">
+<img src="docs/screenshots/mosaico-temi-v2.png" alt="Gli 11 temi del cruscotto e la schermata di attesa" width="100%">
 
 <sub>Tutte le immagini sono generate dal vero codice grafico del firmware: sono pixel per pixel quello che compare sullo schermo.</sub>
 
@@ -110,8 +110,8 @@ Ogni tema mostra gli stessi dati. A destra lo stesso tema in sesta al limitatore
 | 6 | **Endurance**<br><sub>Gare di durata: gomme, carburante, giri</sub> | <img src="docs/screenshots/theme-endurance.png" width="320"> | <img src="docs/screenshots/theme-endurance-limitatore.png" width="320"> |
 | 7 | **Ferrari**<br><sub>Marcia su pannello giallo, 16 LED, freno/gas, turbo e benzina</sub> | <img src="docs/screenshots/theme-ferrari.png" width="320"> | <img src="docs/screenshots/theme-ferrari-limitatore.png" width="320"> |
 | 8 | **Ferrari AC**<br><sub>Per Assetto Corsa: frizione, avanzamento giro, spia PIT</sub> | <img src="docs/screenshots/theme-ferrari-ac.png" width="320"> | <img src="docs/screenshots/theme-ferrari-ac-limitatore.png" width="320"> |
-| 9 | **Ferrari Gold**<br><sub>Come Ferrari, con riquadro della marcia consigliata</sub> | <img src="docs/screenshots/theme-ferrari-gold.png" width="320"> | <img src="docs/screenshots/theme-ferrari-gold-limitatore.png" width="320"> |
-| 10 | **BMW M**<br><sub>Pannello blu, orologio, marcia consigliata</sub> | <img src="docs/screenshots/theme-bmw-m.png" width="320"> | <img src="docs/screenshots/theme-bmw-m-limitatore.png" width="320"> |
+| 9 | **Ferrari Gold**<br><sub>Come Ferrari, con riquadro della marcia consigliata</sub> | <img src="docs/screenshots/theme-ferrari-gold-v2.png" width="320"> | <img src="docs/screenshots/theme-ferrari-gold-limitatore.png" width="320"> |
+| 10 | **BMW M**<br><sub>Pannello blu, orologio, marcia consigliata</sub> | <img src="docs/screenshots/theme-bmw-m-v2.png" width="320"> | <img src="docs/screenshots/theme-bmw-m-limitatore.png" width="320"> |
 
 <sub>I temi 7–10 sono stati aggiunti in questo progetto; i temi 0–6 vengono da <a href="https://github.com/caa1211/esp32-gt7-dashboard">esp32-gt7-dashboard</a>.</sub>
 

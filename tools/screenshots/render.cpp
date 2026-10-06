@@ -144,7 +144,10 @@ int main(int argc, char **argv)
     {
         const std::string base = "theme-" + slug(theme.name);
         renderTheme(theme.id, raceState("4", 72));
-        savePng(base);
+        // -v2: nome nuovo dopo lo spostamento della marcia consigliata, così i
+        // browser non mostrano l'immagine vecchia rimasta in cache
+        const bool renamed = theme.id == DashboardTheme::FerrariGold || theme.id == DashboardTheme::Bmw;
+        savePng(renamed ? base + "-v2" : base);
         renderTheme(theme.id, raceState("6", 99));
         savePng(base + "-limitatore");
     }
