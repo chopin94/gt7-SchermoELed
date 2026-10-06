@@ -1,6 +1,6 @@
 # Telemetry sources and DSH1
 
-User-facing installation steps, including Multiple Arduino/Multiple USB device discovery and the Custom Protocol editor, are available in the [English](../SIMHUB_README.md) and [Traditional Chinese](../SIMHUB_README.zh-TW.md) SimHub USB guides.
+User-facing installation steps, including Multiple Arduino/Multiple USB device discovery and the Custom Protocol editor, are available in the [SimHub USB guide](../../../docs/SIMHUB.md).
 
 The firmware has two inputs: validated GT7 UDP and SimHub Arduino Custom Protocol over physical USB serial. Transport adapters retain separate snapshots. `TelemetrySelector` chooses one snapshot; every theme renders the same `DashboardState`. Renderer animation caches are preserved between updates and invalidated on source changes. GT7 derived metrics reset on source changes or a stale GT7 stream.
 

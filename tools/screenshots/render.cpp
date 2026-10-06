@@ -97,6 +97,7 @@ static DashboardState raceState(const char *gear, int rpmPercent)
     s.rpmAlertRangeValid = true;
     s.revLimitAlertActive = rpmPercent >= 98;
     s.gameRunning = "True";
+    s.suggestedGear = rpmPercent < 90 ? "5" : ""; // marcia consigliata (Ferrari Gold, BMW)
     return s;
 }
 

@@ -27,6 +27,10 @@ The included themes are:
 | `Mono` | 4 | `drawMonoDashboard()` | Monochrome retro-digital instrument UI |
 | `Pocket` | 5 | `drawPocketDashboard()` | Four-tone handheld pixel instrument UI |
 | `Endurance` | 6 | `drawEnduranceDashboard()` | Glance-first endurance racing telemetry UI |
+| `Ferrari` | 7 | `drawFerrariDashboard()` | Ferrari-style yellow gear panel, LED shift lights, turbo/fuel bars |
+| `FerrariAC` | 8 | `drawFerrariACDashboard()` | Ferrari layout for Assetto Corsa: clutch and lap progress, PIT lamp |
+| `FerrariGold` | 9 | `drawFerrariGoldDashboard()` | Ferrari layout with suggested-gear box |
+| `Bmw` | 10 | `drawBmwGoldDashboard()` | BMW M blue gear panel, clock and suggested gear |
 
 Persisted values are part of the device settings format. Never reorder or reuse an existing enum value.
 
@@ -189,4 +193,4 @@ After hardware acceptance:
 5. Update installer manifests and verify the selectable version list.
 6. Commit the accepted checkpoint before publishing.
 
-See [RELEASING.md](RELEASING.md) for binary staging and installer publishing details.
+Firmware binaries are built by the GitHub Actions workflow (`.github/workflows/build.yml`).
