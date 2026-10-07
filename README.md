@@ -131,55 +131,82 @@ Per evitare dati falsati:
 
 ## Temi del cruscotto (15)
 
-### I nuovi temi con l'analisi del giro
+Tutte le schermate dei temi, nello stesso momento di gara simulato:
 
-| Tema | | |
-| --- | :-: | :-: |
-| **FORMULA**<br><sub>Volante da monoposto: shift light verdi, rossi e viola che lampeggiano al limitatore, delta su riquadro colorato, marcia al centro, tre settori con tempi, le quattro gomme agli angoli</sub> | <img src="docs/schermate/theme-formula.png" width="320"> | <img src="docs/schermate/theme-formula-limitatore.png" width="320"> |
-| **MAPPA PISTA**<br><sub>Il circuito si disegna da solo durante il primo giro (a destra, a metà giro); poi la tua auto e i settori colorati, con delta e tempi a lato</sub> | <img src="docs/schermate/theme-mappa-pista.png" width="320"> | <img src="docs/schermate/theme-mappa-pista-costruzione.png" width="320"> |
-| **TELEMETRIA**<br><sub>Cerchio delle forze G con la scia degli ultimi 3 secondi, tracce di gas e freno degli ultimi 7 secondi, picchi della sessione</sub> | <img src="docs/schermate/theme-telemetria.png" width="320"> | <img src="docs/schermate/theme-telemetria-limitatore.png" width="320"> |
-| **PRESTAZIONI**<br><sub>Cronometro 0-100, 0-200, 100-200 km/h e 400 m con velocità d'uscita e velocità massima, ultima prova e migliore; a destra l'albero di Natale in partenza</sub> | <img src="docs/schermate/theme-prestazioni.png" width="320"> | <img src="docs/schermate/theme-prestazioni-partenza.png" width="320"> |
+- **In curva**: quarto giro, in anticipo sul giro migliore.
+- **In frenata**: quinto giro, ABS attivo, in ritardo.
+- **Al limitatore**: sesta marcia, luci che lampeggiano.
 
-### Tutti i temi
+### I 4 nuovi temi con l'analisi del giro
 
-Ogni tema mostra gli stessi dati, con il delta live. A destra lo stesso tema in sesta al limitatore.
+#### FORMULA
+Volante da monoposto. Shift light verdi, rossi e viola, tutti viola lampeggianti al limitatore. Delta live su un riquadro verde o rosso, marcia al centro, velocità, giro in corso e ultimo giro. Sotto, i tre settori con colori e tempi, le quattro gomme agli angoli (colore in base alla temperatura), il giro migliore, il giro, la posizione e il carburante.
 
-| # | Tema | In marcia | Al limitatore |
-| :-: | --- | :-: | :-: |
-| 0 | **Classic**<br><sub>Layout originale a 5 colonne, tempi grandi, delta colorato</sub> | <img src="docs/schermate/theme-classic.png" width="320"> | <img src="docs/schermate/theme-classic-limitatore.png" width="320"> |
-| 1 | **GT3**<br><sub>Tema scuro motorsport (predefinito), contagiri ad arco</sub> | <img src="docs/schermate/theme-gt3.png" width="320"> | <img src="docs/schermate/theme-gt3-limitatore.png" width="320"> |
-| 2 | **Retro**<br><sub>Strumentazione carta e inchiostro</sub> | <img src="docs/schermate/theme-retro.png" width="320"> | <img src="docs/schermate/theme-retro-limitatore.png" width="320"> |
-| 3 | **Radar**<br><sub>Contagiri circolare al centro</sub> | <img src="docs/schermate/theme-radar.png" width="320"> | <img src="docs/schermate/theme-radar-limitatore.png" width="320"> |
-| 4 | **Mono**<br><sub>Digitale monocromatico</sub> | <img src="docs/schermate/theme-mono.png" width="320"> | <img src="docs/schermate/theme-mono-limitatore.png" width="320"> |
-| 5 | **Pocket**<br><sub>LCD da console portatile a 4 toni</sub> | <img src="docs/schermate/theme-pocket.png" width="320"> | <img src="docs/schermate/theme-pocket-limitatore.png" width="320"> |
-| 6 | **Endurance**<br><sub>Gare di durata: gomme, carburante, giri</sub> | <img src="docs/schermate/theme-endurance.png" width="320"> | <img src="docs/schermate/theme-endurance-limitatore.png" width="320"> |
-| 7 | **Ferrari**<br><sub>Marcia su pannello giallo, 15 LED, freno/gas, turbo e benzina</sub> | <img src="docs/schermate/theme-ferrari.png" width="320"> | <img src="docs/schermate/theme-ferrari-limitatore.png" width="320"> |
-| 8 | **Ferrari AC**<br><sub>Per Assetto Corsa: frizione, avanzamento giro, spia PIT</sub> | <img src="docs/schermate/theme-ferrari-ac.png" width="320"> | <img src="docs/schermate/theme-ferrari-ac-limitatore.png" width="320"> |
-| 9 | **Ferrari Gold**<br><sub>Come Ferrari, con la marcia consigliata nell'angolo del pannello</sub> | <img src="docs/schermate/theme-ferrari-gold.png" width="320"> | <img src="docs/schermate/theme-ferrari-gold-limitatore.png" width="320"> |
-| 10 | **BMW M**<br><sub>Pannello blu con le strisce M, orologio, marcia consigliata</sub> | <img src="docs/schermate/theme-bmw-m.png" width="320"> | <img src="docs/schermate/theme-bmw-m-limitatore.png" width="320"> |
-| 11 | **Formula**<br><sub>Volante da monoposto (vedi sopra)</sub> | <img src="docs/schermate/theme-formula.png" width="320"> | <img src="docs/schermate/theme-formula-limitatore.png" width="320"> |
-| 12 | **Mappa pista**<br><sub>Mappa del circuito (vedi sopra)</sub> | <img src="docs/schermate/theme-mappa-pista.png" width="320"> | <img src="docs/schermate/theme-mappa-pista-limitatore.png" width="320"> |
-| 13 | **Telemetria**<br><sub>Forze G e pedali (vedi sopra)</sub> | <img src="docs/schermate/theme-telemetria.png" width="320"> | <img src="docs/schermate/theme-telemetria-limitatore.png" width="320"> |
-| 14 | **Prestazioni**<br><sub>Cronometro accelerazioni (vedi sopra)</sub> | <img src="docs/schermate/theme-prestazioni.png" width="320"> | <img src="docs/schermate/theme-prestazioni-limitatore.png" width="320"> |
+| In curva | In frenata | Al limitatore |
+| :-: | :-: | :-: |
+| <img src="docs/schermate/theme-formula.png" width="260"> | <img src="docs/schermate/theme-formula-frenata.png" width="260"> | <img src="docs/schermate/theme-formula-limitatore.png" width="260"> |
 
-<sub>I temi 7–14 sono stati creati in questo progetto; i temi 0–6 vengono da <a href="https://github.com/caa1211/esp32-gt7-dashboard">esp32-gt7-dashboard</a>.</sub>
+#### MAPPA PISTA
+Prima del traguardo la mappa è vuota. Durante il primo giro lanciato il tracciato si disegna da solo e la scala si adatta man mano. Poi compaiono la posizione dell'auto (pallino rosso), la linea del traguardo e i tre settori colorati: quelli del giro in corso già completati, gli altri del giro precedente. A destra: marcia, velocità, delta, giro in corso, ultimo, migliore, settori, giro e posizione.
+
+| Prima del traguardo | Mappa in costruzione | In curva |
+| :-: | :-: | :-: |
+| <img src="docs/schermate/theme-mappa-pista-attesa.png" width="260"> | <img src="docs/schermate/theme-mappa-pista-costruzione.png" width="260"> | <img src="docs/schermate/theme-mappa-pista.png" width="260"> |
+| **In frenata** | **Al limitatore** | |
+| <img src="docs/schermate/theme-mappa-pista-frenata.png" width="260"> | <img src="docs/schermate/theme-mappa-pista-limitatore.png" width="260"> | |
+
+#### TELEMETRIA
+Cerchio delle forze G con la scia degli ultimi 3 secondi: in frenata il punto sale, in una curva a destra va a sinistra. Accanto, le tracce di gas (verde) e freno (rosso) degli ultimi 7 secondi, il delta e, in basso, G laterale, G longitudinale e i picchi della sessione.
+
+| In curva | In frenata | Al limitatore |
+| :-: | :-: | :-: |
+| <img src="docs/schermate/theme-telemetria.png" width="260"> | <img src="docs/schermate/theme-telemetria-frenata.png" width="260"> | <img src="docs/schermate/theme-telemetria-limitatore.png" width="260"> |
+
+#### PRESTAZIONI
+Cronometro automatico. Fermati 1 secondo e l'albero di Natale si accende: 2 luci bianche, poi 3 gialle ogni mezzo secondo, poi la verde. Se parti prima della verde si accende la rossa (falsa partenza). Misura 0-100, 0-200 e 100-200 km/h, i 400 m con la velocità d'uscita e la velocità massima, sia per l'ultima prova sia per la migliore della sessione (in viola).
+
+| Partenza (luci gialle) | Prova in corso | Prova finita |
+| :-: | :-: | :-: |
+| <img src="docs/schermate/theme-prestazioni-partenza.png" width="260"> | <img src="docs/schermate/theme-prestazioni-in-corsa.png" width="260"> | <img src="docs/schermate/theme-prestazioni.png" width="260"> |
+| **Falsa partenza** | **Al limitatore** | |
+| <img src="docs/schermate/theme-prestazioni-falsa-partenza.png" width="260"> | <img src="docs/schermate/theme-prestazioni-limitatore.png" width="260"> | |
+
+### Gli altri 11 temi
+
+| # | Tema | In curva | In frenata | Al limitatore |
+| :-: | --- | :-: | :-: | :-: |
+| 0 | **Classic**<br><sub>Layout originale a 5 colonne, tempi grandi, delta colorato</sub> | <img src="docs/schermate/theme-classic.png" width="230"> | <img src="docs/schermate/theme-classic-frenata.png" width="230"> | <img src="docs/schermate/theme-classic-limitatore.png" width="230"> |
+| 1 | **GT3**<br><sub>Tema scuro motorsport (predefinito), contagiri ad arco</sub> | <img src="docs/schermate/theme-gt3.png" width="230"> | <img src="docs/schermate/theme-gt3-frenata.png" width="230"> | <img src="docs/schermate/theme-gt3-limitatore.png" width="230"> |
+| 2 | **Retro**<br><sub>Strumentazione carta e inchiostro</sub> | <img src="docs/schermate/theme-retro.png" width="230"> | <img src="docs/schermate/theme-retro-frenata.png" width="230"> | <img src="docs/schermate/theme-retro-limitatore.png" width="230"> |
+| 3 | **Radar**<br><sub>Contagiri circolare al centro</sub> | <img src="docs/schermate/theme-radar.png" width="230"> | <img src="docs/schermate/theme-radar-frenata.png" width="230"> | <img src="docs/schermate/theme-radar-limitatore.png" width="230"> |
+| 4 | **Mono**<br><sub>Digitale monocromatico</sub> | <img src="docs/schermate/theme-mono.png" width="230"> | <img src="docs/schermate/theme-mono-frenata.png" width="230"> | <img src="docs/schermate/theme-mono-limitatore.png" width="230"> |
+| 5 | **Pocket**<br><sub>LCD da console portatile a 4 toni</sub> | <img src="docs/schermate/theme-pocket.png" width="230"> | <img src="docs/schermate/theme-pocket-frenata.png" width="230"> | <img src="docs/schermate/theme-pocket-limitatore.png" width="230"> |
+| 6 | **Endurance**<br><sub>Gare di durata: gomme, carburante, giri</sub> | <img src="docs/schermate/theme-endurance.png" width="230"> | <img src="docs/schermate/theme-endurance-frenata.png" width="230"> | <img src="docs/schermate/theme-endurance-limitatore.png" width="230"> |
+| 7 | **Ferrari**<br><sub>Marcia su pannello giallo, 15 LED, freno/gas, turbo e benzina</sub> | <img src="docs/schermate/theme-ferrari.png" width="230"> | <img src="docs/schermate/theme-ferrari-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-limitatore.png" width="230"> |
+| 8 | **Ferrari AC**<br><sub>Per Assetto Corsa: frizione, avanzamento giro, spia PIT</sub> | <img src="docs/schermate/theme-ferrari-ac.png" width="230"> | <img src="docs/schermate/theme-ferrari-ac-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-ac-limitatore.png" width="230"> |
+| 9 | **Ferrari Gold**<br><sub>Come Ferrari, con la marcia consigliata nell'angolo del pannello</sub> | <img src="docs/schermate/theme-ferrari-gold.png" width="230"> | <img src="docs/schermate/theme-ferrari-gold-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-gold-limitatore.png" width="230"> |
+| 10 | **BMW M**<br><sub>Pannello blu con le strisce M, orologio, marcia consigliata</sub> | <img src="docs/schermate/theme-bmw-m.png" width="230"> | <img src="docs/schermate/theme-bmw-m-frenata.png" width="230"> | <img src="docs/schermate/theme-bmw-m-limitatore.png" width="230"> |
+
+<sub>Numeri dei temi come nel firmware: 11 Formula, 12 Mappa pista, 13 Telemetria, 14 Prestazioni. I temi 7–14 sono stati creati in questo progetto; i temi 0–6 vengono da <a href="https://github.com/caa1211/esp32-gt7-dashboard">esp32-gt7-dashboard</a>.</sub>
 
 ## Notifiche
 
-Per 3 secondi occupano lo schermo. Giri, marcia e velocità restano aggiornati in alto e in basso. Si possono disattivare dal menu **FUNZIONI**.
+Per 3 secondi occupano lo schermo. Giri, marcia, tempo del giro e velocità restano aggiornati in alto e in basso. Si possono disattivare dal menu **FUNZIONI**.
 
-| Giro migliore | Ultimo giro | Riserva |
-| :-: | :-: | :-: |
-| <img src="docs/schermate/notifica-giro-migliore.png" width="260"> | <img src="docs/schermate/notifica-ultimo-giro.png" width="260"> | <img src="docs/schermate/notifica-riserva.png" width="260"> |
-| Nuovo giro migliore, con il miglioramento | All'inizio dell'ultimo giro di gara (GT7) | Carburante per meno di 1,5 giri o sotto l'8% |
+| Giro migliore | Primo giro | Ultimo giro | Riserva |
+| :-: | :-: | :-: | :-: |
+| <img src="docs/schermate/notifica-giro-migliore.png" width="200"> | <img src="docs/schermate/notifica-primo-giro.png" width="200"> | <img src="docs/schermate/notifica-ultimo-giro.png" width="200"> | <img src="docs/schermate/notifica-riserva.png" width="200"> |
+| Nuovo record, con il miglioramento | Il primo giro cronometrato della sessione | All'inizio dell'ultimo giro di gara (GT7) | Carburante per meno di 1,5 giri o sotto l'8% |
 
 ## Schermata di attesa
 
-Compare quando il gioco non trasmette. In alto ci sono lo stato del Wi-Fi e della striscia LED: il pallino è verde se la striscia è stata trovata, e toccando "LED" se ne aprono i controlli. In basso c'è l'indirizzo IP dello schermo.
+Compare quando il gioco non trasmette. In alto ci sono lo stato del Wi-Fi e della striscia LED: il pallino è verde se è collegata o trovata, e toccando "LED" se ne aprono i controlli. In basso c'è l'indirizzo IP dello schermo.
 
 | Minimale | Racing | Riepilogo |
 | :-: | :-: | :-: |
 | <img src="docs/schermate/waiting-minimale.png" width="260"> | <img src="docs/schermate/waiting-racing.png" width="260"> | <img src="docs/schermate/waiting-riepilogo.png" width="260"> |
+| **Riepilogo senza giri** | **Wi-Fi scollegato** | |
+| <img src="docs/schermate/waiting-riepilogo-vuoto.png" width="260"> | <img src="docs/schermate/waiting-wifi-disconnesso.png" width="260"> | |
 
 Lo sfondo **Riepilogo** mostra i tempi della sessione appena guidata: giro migliore, giro ideale (somma dei settori migliori), media, velocità massima e gli ultimi giri con il distacco dal migliore.
 
@@ -187,27 +214,31 @@ Lo sfondo **Riepilogo** mostra i tempi della sessione appena guidata: giro migli
 
 Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude da solo dopo 15 secondi.
 
-| Impostazioni | Funzioni | Selezione tema |
+| Impostazioni | Funzioni | Funzioni dopo l'azzeramento |
 | :-: | :-: | :-: |
-| <img src="docs/schermate/menu-impostazioni.png" width="260"> | <img src="docs/schermate/menu-funzioni.png" width="260"> | <img src="docs/schermate/menu-selezione-tema.png" width="260"> |
-| **Sfondo di attesa** | **Controllo LED** | **LED non trovata** |
-| <img src="docs/schermate/menu-sfondo-attesa.png" width="260"> | <img src="docs/schermate/menu-led.png" width="260"> | <img src="docs/schermate/menu-led-non-trovata.png" width="260"> |
-| **Dispositivo** | **Scelta connessione** | **Configurazione Wi-Fi** |
-| <img src="docs/schermate/menu-dispositivo.png" width="260"> | <img src="docs/schermate/menu-scelta-connessione.png" width="260"> | <img src="docs/schermate/menu-wifi.png" width="260"> |
-| **Ripristino totale** | **Calibrazione touch** | |
-| <img src="docs/schermate/menu-ripristino.png" width="260"> | <img src="docs/schermate/menu-calibrazione-touch.png" width="260"> | |
+| <img src="docs/schermate/menu-impostazioni.png" width="260"> | <img src="docs/schermate/menu-funzioni.png" width="260"> | <img src="docs/schermate/menu-funzioni-azzerato.png" width="260"> |
+| **Selezione tema** | **Anteprima a tutto schermo** | **Dispositivo** |
+| <img src="docs/schermate/menu-selezione-tema.png" width="260"> | <img src="docs/schermate/menu-anteprima-tema.png" width="260"> | <img src="docs/schermate/menu-dispositivo.png" width="260"> |
+| **Sfondo: Minimale** | **Sfondo: Racing** | **Sfondo: Riepilogo** |
+| <img src="docs/schermate/menu-sfondo-minimale.png" width="260"> | <img src="docs/schermate/menu-sfondo-racing.png" width="260"> | <img src="docs/schermate/menu-sfondo-riepilogo.png" width="260"> |
+| **Controllo LED** | **LED non trovata** | **Scelta connessione** |
+| <img src="docs/schermate/menu-led.png" width="260"> | <img src="docs/schermate/menu-led-non-trovata.png" width="260"> | <img src="docs/schermate/menu-scelta-connessione.png" width="260"> |
+| **Configurazione Wi-Fi** | **Ripristino totale** | **Calibrazione touch** |
+| <img src="docs/schermate/menu-wifi.png" width="260"> | <img src="docs/schermate/menu-ripristino.png" width="260"> | <img src="docs/schermate/menu-calibrazione-touch.png" width="260"> |
+| **Verifica calibrazione** | | |
+| <img src="docs/schermate/menu-calibrazione-verifica.png" width="260"> | | |
 
 | Schermata | Cosa fa |
 | --- | --- |
 | **Impostazioni** | Accesso a tema, sfondo di attesa, funzioni, LED e dispositivo |
 | **Funzioni** | Notifiche sì/no, delta *live* (metro per metro) o *ultimo giro* (differenza ultimo giro - migliore), **azzera mappa e tempi** |
-| **Selezione tema** | Anteprima dal vivo, frecce per scorrere i 15 temi, *Applica* per salvarlo |
+| **Selezione tema** | Anteprima dal vivo, frecce per scorrere i 15 temi, *Applica* per salvarlo; toccando l'anteprima si vede a tutto schermo |
 | **Sfondo attesa** | Sceglie tra *Minimale* (logo Sparco su blu), *Racing* (sfondo a tutto schermo) e *Riepilogo* (tempi della sessione); la scelta resta dopo il riavvio |
 | **Controllo LED** | Tema e animazione di riposo, slider di luminosità e colore (si trascina col dito), ON/OFF |
 | **Dispositivo** | Luminosità dello schermo, sorgente dati (GT7, AC, SimHub), ripristino di fabbrica |
 | **Scelta connessione** | Al primo avvio: GT7 diretto, Assetto Corsa diretto o SimHub USB |
 | **Configurazione Wi-Fi** | QR code per collegarsi alla rete `GT7-DASH-SETUP` e aprire `192.168.4.1` |
-| **Calibrazione touch** | Solo al primo avvio, per orientare correttamente il touch |
+| **Calibrazione touch** | Solo al primo avvio: si tocca il bersaglio, poi lo si verifica e si salva |
 
 ---
 

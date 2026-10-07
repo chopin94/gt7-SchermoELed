@@ -250,6 +250,24 @@ static void settingsScreen(SHCustomProtocol::SettingsScreen screen, const char *
     savePng(name);
 }
 
+// Hard braking: ABS working, behind on the best lap.
+static DashboardState brakingState(DashboardState st)
+{
+    st.absActive = "True";
+    st.tcActive = "False";
+    return st;
+}
+
+static void waitingScreen(uint8_t background, bool ledFound, const char *name)
+{
+    dash.waitingBackground = background;
+    dash.ledStripFound = ledFound;
+    dash.connectingScreenActive = false;
+    tft.fillScreen(TFT_BLACK);
+    dash.drawConnectingScreenBase();
+    savePng(name);
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1) g_outDir = argv[1];
@@ -261,10 +279,16 @@ int main(int argc, char **argv)
     buildTrack();
     printf("Circuito simulato: %.0f m\n", track.length);
 
+    printf("Prima della sessione:\n");
+    waitingScreen(2, true, "waiting-riepilogo-vuoto");
+
     // Out-lap from the second half of the circuit, then lap 1 records the map.
     const float steady[3] = {1.0f, 1.0f, 1.0f};
     driver.s = track.length * 0.6f;
     driver.speed = track.speedAt(driver.s);
+    driver.drive(steady, [] { return lapFraction() > 0.85f; });
+    renderTheme(DashboardTheme::TrackMap, simState());
+    savePng("theme-mappa-pista-attesa");
     driver.drive(steady, [] { return driver.lapCount == 1 && lapFraction() > 0.46f; });
 
     printf("Mappa in costruzione:\n");
@@ -296,6 +320,23 @@ int main(int argc, char **argv)
         savePng(base + "-limitatore");
     }
 
+    // Lap 5, a little slower: hard braking while behind on the best lap.
+    driver.drive(attack, [] { return driver.lapCount == 5; });
+    const float slower[3] = {0.985f, 0.982f, 0.99f};
+    driver.drive(slower, [] {
+        return lapFraction() > 0.15f && driver.accel < -9.0f && dash.lapAnalysis.hasLiveDelta() &&
+               dash.lapAnalysis.liveDeltaMs() > 150;
+    });
+    const DashboardState braking = brakingState(simState());
+    printf("In frenata, giro %d al %.0f%%: %s km/h, delta %s\n", driver.lapCount, lapFraction() * 100,
+           braking.speed.c_str(), braking.sessionBestLiveDeltaSeconds.c_str());
+    for (const auto &theme : DASHBOARD_THEMES)
+    {
+        if (theme.id == DashboardTheme::Performance) continue; // its own runs below
+        renderTheme(theme.id, braking);
+        savePng("theme-" + slug(theme.name) + "-frenata");
+    }
+
     // Acceleration run: stop, wait for the green light, full throttle to 250.
     printf("Prestazioni:\n");
     const float stop[3] = {0, 0, 0};
@@ -305,12 +346,26 @@ int main(int argc, char **argv)
     savePng("theme-prestazioni-partenza");
     driver.drive(stop, [] { return dash.lapAnalysis.treeLight() == LapAnalysis::TreeLight::Green; });
     for (int i = 0; i < 14; ++i) driver.step(0); // reaction time
+    while (dash.lapAnalysis.runSeconds() < 6.2f || !(dash.lapAnalysis.runSeconds() == dash.lapAnalysis.runSeconds()))
+        driver.step(90.0f);
+    renderTheme(DashboardTheme::Performance, simState());
+    savePng("theme-prestazioni-in-corsa");
     while (driver.speed < 250 / 3.6f) driver.step(90.0f);
     for (int i = 0; i < 20; ++i) driver.step(0); // braking ends the run
-    renderTheme(DashboardTheme::Performance, simState());
+    const DashboardState finished = simState();
+    renderTheme(DashboardTheme::Performance, finished);
     savePng("theme-prestazioni");
-    renderTheme(DashboardTheme::Performance, limiterState(simState()));
+    renderTheme(DashboardTheme::Performance, limiterState(finished));
     savePng("theme-prestazioni-limitatore");
+
+    // Second start, too early: away on the second amber light.
+    driver.drive(stop, [] { return driver.speed <= 0.0f; });
+    driver.drive(stop, [] { return dash.lapAnalysis.treeLight() == LapAnalysis::TreeLight::Amber2; });
+    for (int i = 0; i < 150; ++i) driver.step(90.0f);
+    renderTheme(DashboardTheme::Performance, simState());
+    savePng("theme-prestazioni-falsa-partenza");
+    while (driver.speed < 210 / 3.6f) driver.step(90.0f);
+    for (int i = 0; i < 20; ++i) driver.step(0);
 
     printf("Notifiche:\n");
     const auto notification = [&race](LapAnalysis::EventType type, int32_t lapMs, int32_t gainMs,
@@ -324,20 +379,18 @@ int main(int argc, char **argv)
         savePng(name);
     };
     notification(LapAnalysis::EventType::BestLap, dash.lapAnalysis.bestLapMs(), 214, "", "notifica-giro-migliore");
+    notification(LapAnalysis::EventType::BestLap, dash.lapAnalysis.lapRecord(dash.lapAnalysis.storedLaps() - 1).lapMs,
+                 -1, "", "notifica-primo-giro");
     notification(LapAnalysis::EventType::FinalLap, -1, -1, "GIRO 10/10", "notifica-ultimo-giro");
     notification(LapAnalysis::EventType::LowFuel, -1, -1, "1.4 GIRI", "notifica-riserva");
 
     printf("Schermata di attesa:\n");
-    static const char *const backgrounds[3] = {"waiting-minimale", "waiting-racing", "waiting-riepilogo"};
-    for (uint8_t bg = 0; bg < 3; ++bg)
-    {
-        dash.waitingBackground = bg;
-        dash.ledStripFound = bg != 0;
-        dash.connectingScreenActive = false;
-        tft.fillScreen(TFT_BLACK);
-        dash.drawConnectingScreenBase();
-        savePng(backgrounds[bg]);
-    }
+    waitingScreen(0, false, "waiting-minimale");
+    waitingScreen(1, true, "waiting-racing");
+    waitingScreen(2, true, "waiting-riepilogo");
+    WiFi.connectedStatus = WL_DISCONNECTED;
+    waitingScreen(0, false, "waiting-wifi-disconnesso");
+    WiFi.connectedStatus = WL_CONNECTED;
 
     printf("Menu e impostazioni:\n");
     using S = SHCustomProtocol::SettingsScreen;
@@ -347,8 +400,23 @@ int main(int argc, char **argv)
         dash.previewFullscreen = false;
         dash.clearThemePreviewRenderCache();
     });
-    settingsScreen(S::BackgroundSelection, "menu-sfondo-attesa", [] { dash.previewWaitingBackground = 2; });
+    settingsScreen(S::ThemeSelection, "menu-anteprima-tema", [] {
+        dash.previewDashboardTheme = DashboardTheme::TrackMap;
+        dash.previewFullscreen = true;
+        dash.clearThemePreviewRenderCache();
+    });
+    dash.previewFullscreen = false;
+    settingsScreen(S::BackgroundSelection, "menu-sfondo-minimale", [] { dash.previewWaitingBackground = 0; });
+    settingsScreen(S::BackgroundSelection, "menu-sfondo-racing", [] { dash.previewWaitingBackground = 1; });
+    settingsScreen(S::BackgroundSelection, "menu-sfondo-riepilogo", [] { dash.previewWaitingBackground = 2; });
     settingsScreen(S::Features, "menu-funzioni", [] { dash.featuresStatus = ""; });
+    settingsScreen(S::Features, "menu-funzioni-azzerato", [] {
+        dash.notificationsEnabled = false;
+        dash.liveDeltaMode = false;
+        dash.featuresStatus = "Mappa, tempi e prove azzerati";
+    });
+    dash.notificationsEnabled = true;
+    dash.liveDeltaMode = true;
     settingsScreen(S::DeviceSettings, "menu-dispositivo");
     settingsScreen(S::LedSettings, "menu-led", [] {
         dash.ledStripFound = true;
@@ -361,5 +429,6 @@ int main(int argc, char **argv)
     settingsScreen(S::WifiSettings, "menu-wifi");
     settingsScreen(S::ResetConfirmation, "menu-ripristino");
     settingsScreen(S::InitialTouch, "menu-calibrazione-touch");
+    settingsScreen(S::TouchCalibration, "menu-calibrazione-verifica");
     return 0;
 }
