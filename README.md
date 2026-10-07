@@ -119,7 +119,8 @@ GT7 e Assetto Corsa trasmettono solo dati grezzi: posizione, velocità, contagir
 
 Per evitare dati falsati:
 
-- Il **giro di uscita dai box** e il **primo giro di gara**, che parte dalla griglia dietro al traguardo, vengono cronometrati. Però non diventano mai il riferimento del delta e non disegnano la mappa.
+- Il **giro di uscita dai box** non viene contato: il suo inizio non passa dal traguardo.
+- Il **primo giro di gara** parte dalla griglia, dietro al traguardo. Viene cronometrato, ma non diventa il riferimento del delta e non disegna la mappa: la mappa parte dal primo giro lanciato.
 - Un **salto di posizione** (riavvio, rewind, cambio sessione) annulla il giro in corso.
 - **Cambiando auto** i tempi ripartono da zero e la mappa resta. **Cambiando pista** riparte tutto: Assetto Corsa comunica il nome del circuito, per GT7 lo schermo se ne accorge quando l'auto resta a più di 200 m dal tracciato registrato.
 - Dal menu **FUNZIONI** puoi azzerare mappa e tempi in ogni momento.
