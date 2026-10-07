@@ -11,6 +11,7 @@ Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 ![Temi](https://img.shields.io/badge/temi%20schermo-15-FFCC00)
 ![Temi LED](https://img.shields.io/badge/temi%20LED-6-22C55E)
 ![Delta live](https://img.shields.io/badge/delta-live-B030FF)
+![OTA](https://img.shields.io/badge/aggiornamento-via%20Wi--Fi-0EA5E9)
 
 <img src="docs/schermate/mosaico-temi.png" alt="I 15 temi del cruscotto e il riepilogo della sessione" width="100%">
 
@@ -33,6 +34,7 @@ Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 - [Striscia LED](#striscia-led)
 - [Comunicazione tra schermo e LED](#comunicazione-tra-schermo-e-led)
 - [Compilare e caricare i firmware](#compilare-e-caricare-i-firmware)
+- [Aggiornamento via Wi-Fi (OTA)](#aggiornamento-via-wi-fi-ota)
 - [Struttura del repository](#struttura-del-repository)
 - [Rigenerare gli screenshot](#rigenerare-gli-screenshot)
 - [Prossimi passi](#prossimi-passi)
@@ -93,6 +95,7 @@ flowchart LR
 - 🖼️ Tre sfondi per la schermata di attesa (Minimale, Racing, Riepilogo)
 - 🚥 Controllo completo della striscia LED dal touch
 - 📶 Configurazione Wi-Fi con QR code; se la rete salvata non si trova, il portale si riapre da solo
+- 📲 **Aggiornamento del firmware via Wi-Fi** dal telefono o da PlatformIO, con ritorno automatico alla versione precedente se quella nuova non riparte ([come](#aggiornamento-via-wi-fi-ota))
 - 🌙 Spegnimento manuale e sospensione/risveglio automatici
 - 🇮🇹 Interfaccia in italiano
 
@@ -102,6 +105,7 @@ flowchart LR
 - 4 animazioni a gioco fermo o in pausa: spento, colore fisso, respiro, arcobaleno
 - Pagina web di configurazione con telemetria live
 - Impostazioni salvate in memoria, configurazione Wi-Fi con WiFiManager
+- Aggiornamento del firmware via Wi-Fi dalla sua pagina web, con l'avanzamento mostrato sui LED
 
 ---
 
@@ -225,8 +229,8 @@ Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude
 | <img src="docs/schermate/menu-led.png" width="260"> | <img src="docs/schermate/menu-led-non-trovata.png" width="260"> | <img src="docs/schermate/menu-scelta-connessione.png" width="260"> |
 | **Configurazione Wi-Fi** | **Ripristino totale** | **Calibrazione touch** |
 | <img src="docs/schermate/menu-wifi.png" width="260"> | <img src="docs/schermate/menu-ripristino.png" width="260"> | <img src="docs/schermate/menu-calibrazione-touch.png" width="260"> |
-| **Verifica calibrazione** | | |
-| <img src="docs/schermate/menu-calibrazione-verifica.png" width="260"> | | |
+| **Verifica calibrazione** | **Aggiornamento** | **Aggiornamento in modalità SimHub** |
+| <img src="docs/schermate/menu-calibrazione-verifica.png" width="260"> | <img src="docs/schermate/menu-aggiornamento.png" width="260"> | <img src="docs/schermate/menu-aggiornamento-simhub.png" width="260"> |
 
 | Schermata | Cosa fa |
 | --- | --- |
@@ -235,7 +239,8 @@ Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude
 | **Selezione tema** | Anteprima dal vivo, frecce per scorrere i 15 temi, *Applica* per salvarlo; toccando l'anteprima si vede a tutto schermo |
 | **Sfondo attesa** | Sceglie tra *Minimale* (logo Sparco su blu), *Racing* (sfondo a tutto schermo) e *Riepilogo* (tempi della sessione); la scelta resta dopo il riavvio |
 | **Controllo LED** | Tema e animazione di riposo, slider di luminosità e colore (si trascina col dito), ON/OFF |
-| **Dispositivo** | Luminosità dello schermo, sorgente dati (GT7, AC, SimHub), ripristino di fabbrica |
+| **Dispositivo** | Luminosità dello schermo, sorgente dati (GT7, AC, SimHub), ripristino di fabbrica, aggiornamento |
+| **Aggiornamento** | Versione installata, indirizzo e QR code della pagina di aggiornamento ([vedi sotto](#aggiornamento-via-wi-fi-ota)); resta aperta finché non si torna indietro o parte il gioco |
 | **Scelta connessione** | Al primo avvio: GT7 diretto, Assetto Corsa diretto o SimHub USB |
 | **Configurazione Wi-Fi** | QR code per collegarsi alla rete `GT7-DASH-SETUP` e aprire `192.168.4.1` |
 | **Calibrazione touch** | Solo al primo avvio: si tocca il bersaglio, poi lo si verifica e si salva |
@@ -268,7 +273,7 @@ Con il **limitatore** attivo (flag di GT7) tutti i temi lampeggiano in rosso. Il
 
 ### Pagina web
 
-All'indirizzo IP della striscia (mostrato sul monitor seriale) c'è la pagina di configurazione con telemetria in tempo reale. Al primo avvio la striscia crea la rete Wi-Fi **`GT7_LED_Config`** per inserire la password di casa.
+All'indirizzo IP della striscia (mostrato sul monitor seriale) c'è la pagina di configurazione con telemetria in tempo reale; in fondo, *Aggiorna firmware via Wi-Fi* apre la [pagina di aggiornamento](#aggiornamento-via-wi-fi-ota). Al primo avvio la striscia crea la rete Wi-Fi **`GT7_LED_Config`** per inserire la password di casa.
 
 <img src="docs/schermate/led-web.png" alt="Pagina web della striscia LED" width="360">
 
@@ -283,6 +288,7 @@ All'indirizzo IP della striscia (mostrato sul monitor seriale) c'è la pagina di
 | Schermo → LED | `GET http://<ip>/api/settings?b=&l=&g=&ma=&im=&ic=&save=1` | Luminosità, numero LED, gorgoglio, limite mA, animazione di riposo, colore |
 | Schermo → LED | `GET http://<ip>/api/theme?v=<0-5>` | Tema LED |
 | Browser → LED | `GET http://<ip>/restart` | Riavvio |
+| Browser → schermo e LED | `GET /update`, `POST /update` | [Aggiornamento del firmware via Wi-Fi](#aggiornamento-via-wi-fi-ota) |
 
 Gli indici di tema (0–5) e di animazione di riposo (0–3) sono gli stessi nei due firmware: `enum Theme` e `enum IdleMode` in [`firmware/led-strip/src/main.cpp`](firmware/led-strip/src/main.cpp).
 
@@ -318,14 +324,67 @@ La porta COM viene trovata in automatico. Se non la trova, togli il `;` davanti 
 
 ---
 
+## Aggiornamento via Wi-Fi (OTA)
+
+Schermo e striscia LED si aggiornano senza cavo, dal telefono o dal PC, quando sono collegati al Wi-Fi di casa.
+
+> [!IMPORTANT]
+> **Serve un ultimo caricamento via USB** di questa versione (`pio run -e esp32-2432s024c -t upload` per lo schermo, `pio run -t upload` per la striscia). Per lo schermo installa la nuova tabella delle partizioni con due slot da 1,94 MB, uno per il firmware in uso e uno per quello in arrivo. Wi-Fi salvato, calibrazione del touch e impostazioni restano. Da lì in poi il cavo non serve più.
+
+**Dal telefono o dal PC**
+
+1. Sullo schermo apri **IMPOSTAZIONI → DISPOSITIVO → AGGIORNAMENTO**: ci sono indirizzo, QR code e versione installata. Funziona in modalità GT7 o AC; con SimHub il Wi-Fi è spento e si usa il cavo, che in quel caso è già collegato al PC.
+2. Inquadra il QR code o apri l'indirizzo nel browser, scegli il file **`firmware.bin`** e premi **Aggiorna**.
+3. Lo schermo mostra l'avanzamento, poi si riavvia con la versione nuova (circa 30 secondi in tutto).
+
+Per la striscia LED l'indirizzo è quello della sua pagina web, alla voce *Aggiorna firmware via Wi-Fi* (o direttamente `http://<ip>/update`): durante il trasferimento la striscia si riempie di blu, diventa verde alla fine e rossa se qualcosa non va.
+
+| Pagina di aggiornamento | File sbagliato, fermato nel browser |
+| :-: | :-: |
+| <img src="docs/schermate/web-aggiornamento.png" width="300"> | <img src="docs/schermate/web-aggiornamento-rifiutato.png" width="300"> |
+
+| Trasferimento | Fatto: riavvio | Errore: resta la versione di prima |
+| :-: | :-: | :-: |
+| <img src="docs/schermate/aggiornamento-in-corso.png" width="260"> | <img src="docs/schermate/aggiornamento-completato.png" width="260"> | <img src="docs/schermate/aggiornamento-errore.png" width="260"> |
+
+**Dove trovare `firmware.bin`**: dopo una compilazione è in `firmware/dashboard/.pio/build/esp32-2432s024c/firmware.bin` (per la striscia `firmware/led-strip/.pio/build/lolin_s2_mini/firmware.bin`). Senza compilare: scheda **Actions** su GitHub → ultima esecuzione → *Artifacts* → `firmware-schermo-esp32-2432s024c` (o `firmware-led-strip`), dentro lo zip c'è `firmware.bin`. `bootloader.bin` e `partitions.bin` servono solo per il caricamento via USB.
+
+**Da PlatformIO**: scrivi l'indirizzo in `custom_ota_address` nell'ambiente `esp32-2432s024c-ota` di [`platformio.ini`](firmware/dashboard/platformio.ini) (per la striscia `lolin_s2_mini-ota`), poi
+
+```bash
+pio run -d firmware/dashboard -e esp32-2432s024c-ota -t upload   # schermo
+pio run -d firmware/led-strip -e lolin_s2_mini-ota -t upload     # striscia LED
+```
+
+oppure dalla barra di PlatformIO in VS Code scegli l'ambiente `-ota` e premi *Upload*. Usa `curl`, già presente in Windows 10/11 aggiornato, macOS e Linux. A mano: `curl -H "Expect:" --data-binary @firmware.bin http://<ip>/update`.
+
+**Cosa viene controllato.** Il firmware nuovo viene scritto nello slot libero mentre arriva: quello in uso non viene toccato finché il nuovo non è completo e verificato. Se il trasferimento si interrompe, o se il file non supera i controlli, non cambia niente.
+
+| Controllo | Cosa evita |
+| --- | --- |
+| Intestazione ESP32 e descrittore dell'applicazione | file che non sono firmware, `bootloader.bin`, immagini complete da caricare via USB |
+| Tipo di chip | il firmware della striscia (ESP32-S2) sullo schermo (ESP32) e viceversa |
+| Nome della scheda incorporato nel firmware (`GT7-FW:schermo-esp32-2432s024c`) | il firmware di un'altra variante dello schermo, o una versione vecchia che non saprebbe più aggiornarsi via Wi-Fi |
+| Dimensione, checksum e SHA-256 dell'immagine | file troppo grandi, troncati o danneggiati |
+
+I primi tre controlli li fa già il browser, prima di inviare il file; il dispositivo li ripete comunque, così valgono anche per PlatformIO e `curl`.
+
+**Ritorno automatico alla versione precedente.** Dopo l'aggiornamento il firmware nuovo parte *in prova*: diventa definitivo solo quando torna sul Wi-Fi con la pagina di aggiornamento attiva. Se si blocca, si riavvia in continuazione o non riesce a ricollegarsi, al riavvio successivo il bootloader rimette da solo quello di prima, che può ricevere subito un altro aggiornamento.
+
+**Password (facoltativa).** Chiunque sia sulla rete di casa può aprire la pagina di aggiornamento. Per chiederla con una password togli il `;` davanti a `-DGT7_OTA_PASSWORD` in `platformio.ini` (schermo e striscia) e scegline una; il nome utente è `admin`. Con PlatformIO aggiungi `-u admin:password` al comando `curl` dell'ambiente `-ota`.
+
+---
+
 ## Struttura del repository
 
 ```
 ├── firmware/
 │   ├── dashboard/                   Schermo 320×240 (PlatformIO, ESP32)
-│   │   ├── platformio.ini           3 ambienti: 2432S024C, 2432S028, 2432S028-ST7789
+│   │   ├── platformio.ini           3 ambienti (2432S024C, 2432S028, 2432S028-ST7789) e uno via Wi-Fi
+│   │   ├── partitions_ota.csv       Due slot da 1,94 MB per l'aggiornamento via Wi-Fi
 │   │   ├── src/
 │   │   │   ├── main.cpp             Avvio, rete, sorgenti di telemetria
+│   │   │   ├── DashboardUpdate.h    Pagina di aggiornamento dello schermo
 │   │   │   ├── SHCustomProtocol.h   Logica del cruscotto, menu, notifiche, controllo LED
 │   │   │   ├── LapAnalysis.h        Delta live, settori, mappa, forze G, accelerazioni, sessione
 │   │   │   ├── dashboard/themes/    I 15 temi (*.inc)
@@ -334,9 +393,10 @@ La porta COM viene trovata in automatico. Se non la trova, togli il `;` davanti 
 │   │   │   ├── ACUdpTelemetry.h     Telemetria Assetto Corsa
 │   │   │   └── sparco_*.h           Immagini della schermata di attesa
 │   │   ├── lib/                     GT7 UDP, metriche derivate, librerie SimHub
+│   │   ├── lib/OtaUpdate/           Aggiornamento via Wi-Fi e controlli sul file (anche per la striscia)
 │   │   ├── simhub/                  Formula Custom Protocol per SimHub
 │   │   ├── docs/                    Protocollo di telemetria, sviluppo temi, EV
-│   │   └── tests/                   Test del protocollo SimHub e dell'analisi del giro
+│   │   └── tests/                   Test del protocollo SimHub, dell'analisi del giro e dell'aggiornamento
 │   └── led-strip/                   Striscia LED WS2812B (PlatformIO, ESP32-S2)
 │       ├── platformio.ini
 │       └── src/main.cpp             Temi LED, pagina web, API, discovery
@@ -361,13 +421,13 @@ Per mappa, delta, settori e forze G, [`render.cpp`](tools/screenshots/render.cpp
 tools/screenshots/build.sh                 # tutte le schermate in docs/schermate/
 python3 tools/screenshots/mosaic.py        # immagine di apertura del README
 node tools/screenshots/led-web.mjs         # pagina web LED (richiede Playwright)
+node tools/screenshots/update-web.mjs      # pagina di aggiornamento, verificandone i controlli
 ```
 
 ## Prossimi passi
 
 Idee già valutate, non ancora fatte:
 
-- **Aggiornamento del firmware via Wi-Fi (OTA)**: richiede una nuova tabella delle partizioni, da caricare un'ultima volta via USB.
 - **Striscia LED**: modalità delta (verde in anticipo, rosso in ritardo), avviso riserva, lampeggio sulla marcia consigliata.
 - **Pagina web dello schermo** per cambiare tema dal telefono.
 - **Mappe salvate per circuito**, per non doverle ridisegnare a ogni sessione.

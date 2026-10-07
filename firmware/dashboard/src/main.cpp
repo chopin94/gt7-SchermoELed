@@ -1127,12 +1127,26 @@ void buttonMatrixStatusChanged(int buttonId, byte Status) {
 
 
 #include "DashboardNetwork.h"
+#include "DashboardUpdate.h"
 DashboardNetwork dashboardNetwork;
+DashboardUpdate dashboardUpdate;
 bool dashboardNetworkReady = false;
+bool dashboardOnline = false;
 bool gt7SocketReady = false;
 bool acSocketReady = false;
+
+// After an update over Wi-Fi the new firmware runs on trial: DashboardUpdate
+// confirms it once it is back on the network with its update page. If it
+// crashes or never gets there, the next restart brings back the previous one.
+extern "C" bool verifyRollbackLater() { return true; }
+
+static void showFirmwareUpdate(const OtaImage::Progress &progress, void *) {
+    shCustomProtocol.firmwareUpdateProgress(progress);
+}
+
 void setupDashboardNetwork() {
     dashboardNetworkReady = dashboardNetwork.begin();
+    dashboardUpdate.begin(showFirmwareUpdate, nullptr);
 }
 void stopDirectTelemetrySockets() {
     gt7Telem.stop(); gt7SocketReady = false;
@@ -1154,6 +1168,7 @@ void serviceDashboardNetwork() {
     if (shCustomProtocol.takeWifiStopRequest()) dashboardNetwork.send(DashboardNetwork::Action::StopPortal, mode);
     DashboardNetwork::Status status;
     if (dashboardNetwork.receive(status)) {
+        dashboardOnline = status.connected && !status.portal;
         shCustomProtocol.networkState(status.message, status.portal, status.connected, status.configured);
         const bool gt7Connected = mode == TelemetryMode::GT7 && status.connected;
         if (gt7Connected && !gt7SocketReady) {
@@ -1166,6 +1181,8 @@ void serviceDashboardNetwork() {
     }
     shCustomProtocol.setGT7TransportReady(gt7SocketReady);
     shCustomProtocol.setACTransportReady(acSocketReady);
+    dashboardUpdate.service(dashboardOnline);
+    shCustomProtocol.updatePageState(dashboardUpdate.ready());
 }
 
 void setup()

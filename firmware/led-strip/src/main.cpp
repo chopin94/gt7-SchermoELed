@@ -2,8 +2,20 @@
 #include <FastLED.h>
 #include <WiFiManager.h>
 #include <WebServer.h>
+#include <Update.h>
+#include <OtaWebUpdate.h>
 #include <GT7UDPParser.h>
 #include <Preferences.h>
+
+// ==================== FIRMWARE ====================
+#define LED_FIRMWARE_VERSION "1.1.0"
+// Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
+// della striscia LED (vedi lib/OtaUpdate nel firmware dello schermo).
+static const char LED_FIRMWARE_TAG[] = OTA_TAG_PREFIX "led-lolin-s2-mini";
+// Password della pagina /update (utente "admin"), vuota = nessuna: vedi platformio.ini
+#ifndef GT7_OTA_PASSWORD
+#define GT7_OTA_PASSWORD ""
+#endif
 
 // ==================== CONFIGURAZIONE LED ====================
 #define LED_PIN     7
@@ -30,8 +42,12 @@ IPAddress playstationIP(255, 255, 255, 255);
 char packetVersion = 'A';
 
 // ==================== WEB SERVER & UDP ====================
-WebServer server(80);
+OtaWebServer server(80);
+OtaWebUpdate *firmwareUpdate = nullptr;
 WiFiUDP ledDiscoveryUdp;
+// Dopo l'esito di un aggiornamento la striscia lo mostra per un momento.
+bool ledHold = false;
+unsigned long ledHoldStart = 0;
 
 // ==================== STATO GLOBALE ====================
 unsigned long lastFlashTime = 0;
@@ -208,6 +224,11 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   <div class="card">
     <h2>🔧 Sistema</h2>
+    <div class="status-row">
+      <span class="status-label">Firmware</span>
+      <span class="status-value">%FW_VERSION%</span>
+    </div>
+    <a class="btn" href="/update" style="display:block;text-align:center;text-decoration:none;background:#0f3460;">Aggiorna firmware via Wi-Fi</a>
     <button class="btn" onclick="if(confirm('Riavviare?'))fetch('/restart')">Riavvia ESP32</button>
   </div>
 
@@ -278,6 +299,7 @@ void handleRoot() {
     html.replace("%THEME_4_SEL%", currentTheme == THEME_F1_REVERSE ? "selected" : "");
     html.replace("%THEME_2_SEL%", currentTheme == THEME_SUPERCAR ? "selected" : "");
     html.replace("%THEME_3_SEL%", currentTheme == THEME_SMOOTH_FADE ? "selected" : "");
+    html.replace("%FW_VERSION%", LED_FIRMWARE_VERSION);
     server.send(200, "text/html", html);
 }
 
@@ -362,6 +384,32 @@ void handleRestart() {
     ESP.restart();
 }
 
+// ==================== AGGIORNAMENTO VIA WI-FI ====================
+// Dopo un aggiornamento il firmware nuovo è in prova: viene confermato quando
+// torna sul Wi-Fi con la pagina /update (fine di setup()). Se si blocca prima,
+// al riavvio successivo torna da solo quello precedente.
+extern "C" bool verifyRollbackLater() { return true; }
+
+// Avanzamento sulla striscia stessa: barra blu che cresce, tutta verde alla
+// fine, rossa per un momento se l'aggiornamento non riesce.
+static void showFirmwareUpdate(const OtaImage::Progress &progress, void *) {
+    static int shownLeds = -1;
+    if (progress.phase == OtaImage::Phase::Receiving) {
+        const int lit = progress.total ? int(uint64_t(activeLeds) * progress.received / progress.total) : 0;
+        // Pochi aggiornamenti bastano: ognuno occupa la striscia qualche ms.
+        if (shownLeds >= 0 && lit < shownLeds + max(1, activeLeds / 20)) return;
+        shownLeds = lit;
+        fill_solid(leds, activeLeds, CRGB::Black);
+        fill_solid(leds, lit, CRGB(0, 60, 255));
+    } else {
+        shownLeds = -1;
+        fill_solid(leds, activeLeds, progress.phase == OtaImage::Phase::Done ? CRGB::Green : CRGB::Red);
+        ledHold = true;
+        ledHoldStart = millis();
+    }
+    FastLED.show();
+}
+
 // ==================== SETUP ====================
 void setup() {
     Serial.begin(115200);
@@ -419,8 +467,12 @@ void setup() {
     server.on("/api/settings", handleApiSettings);
     server.on("/api/theme", handleApiTheme);
     server.on("/restart", handleRestart);
+    const OtaWebUpdate::Config update = {"GT7 LED", LED_FIRMWARE_TAG, LED_FIRMWARE_VERSION, GT7_OTA_PASSWORD};
+    firmwareUpdate = OtaWebUpdate::attach(server, update, showFirmwareUpdate);
     server.begin();
     Serial.println("Web Server attivo su http://" + WiFi.localIP().toString());
+    // Sul Wi-Fi con la pagina di aggiornamento: questo firmware va bene.
+    OtaWebUpdate::confirmRunningFirmware();
 
     // Inizializza GT7 Telemetry
     Serial.println("Inizializzazione GT7 Telemetry...");
@@ -435,6 +487,11 @@ void setup() {
 void loop() {
     // Gestisci richieste web
     server.handleClient();
+    firmwareUpdate->loop();
+    if (ledHold) {
+        if (millis() - ledHoldStart < 2000) return;
+        ledHold = false;
+    }
 
     // Broadcast IP address for auto-discovery
     static unsigned long lastDiscoveryBcast = 0;

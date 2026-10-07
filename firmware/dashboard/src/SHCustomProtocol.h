@@ -3,6 +3,7 @@
 #include "ACUdpTelemetry.h"
 #include "LapAnalysis.h"
 #include "DashboardWiFiCredentials.h"
+#include <OtaImage.h>
 #include <qrcode.h>
 
 #ifndef __SHCUSTOMPROTOCOL_H__
@@ -19,7 +20,6 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <map>
-#include <BleGamepad.h> // libreria bluetooth
 #include <GT7DerivedMetrics.h>
 #include <WiFiUdp.h>
 #include <HTTPClient.h>
@@ -249,11 +249,6 @@ struct DashboardState
 std::map<String, String> prevData;
 std::map<String, int32_t> prevColor;
 
-// configuro ble per gamepad
-
-BleGamepad bleGamepad("ESP32 Touch Gamepad", "YourCompany", 100);
-BleGamepadConfiguration bleGamepadConfig;
-
 static void showWifiConnectionFailedScreen()
 {
 	tft.fillScreen(TFT_BLACK);
@@ -298,6 +293,14 @@ private:
     // Wi-Fi mode (GT7 or AC) waiting for the network before it is selected.
     TelemetryMode pendingWifiMode = TelemetryMode::GT7;
     String networkStatus = "Wi-Fi not configured";
+    // Firmware update over Wi-Fi: the page runs in main.cpp (DashboardUpdate),
+    // the screen tells where to open it and shows the progress of a transfer.
+    bool wifiConnected = false, updatePageReady = false;
+    bool firmwareUpdateActive = false; // full-screen progress on display
+    OtaImage::Progress firmwareUpdate;
+    OtaImage::Phase firmwareUpdateDrawnPhase = OtaImage::Phase::Idle;
+    int firmwareUpdateDrawnPercent = -1;
+    uint32_t firmwareUpdateChangedAt = 0;
     bool receivingCustom = false, customOverflow = false, customProtocolError = false;
     char customLine[SimHubProtocol::maxLength] = {};
     unsigned customLength = 0;
@@ -404,6 +407,7 @@ private:
 		TouchCalibration,
 		LedSettings,
 		Features,
+		FirmwareUpdate,
 	};
 
 	static constexpr unsigned long SETTINGS_TIMEOUT_MS = 15000UL;
@@ -942,19 +946,6 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 #if INCLUDE_GT7_WIFI
 		derivedMetrics.reset();
 #endif
-
-		// bleGamepadConfig.setAutoReport(true); // in false non invia i comandi a windows
-		// bleGamepadConfig.setAxesMax(32760);
-		// bleGamepadConfig.setIncludeSlider1(false);
-		// bleGamepadConfig.setIncludeXAxis(false);
-		// bleGamepadConfig.setIncludeYAxis(false);
-		// bleGamepadConfig.setIncludeZAxis(false);
-		// bleGamepadConfig.setIncludeRxAxis(false);
-		// bleGamepadConfig.setIncludeRyAxis(false);
-		// bleGamepadConfig.setIncludeRzAxis(false);
-		// bleGamepadConfig.setButtonCount(numButtons); // Variabile per il numero di pulsanti
-		// bleGamepad.begin(&bleGamepadConfig);
-		// Serial.println("Configurazione BleGamepad completata.");   //x debug
 	}
 
 #if INCLUDE_GT7_WIFI
@@ -1418,9 +1409,30 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
             if (!connected && settingsScreen == SettingsScreen::WifiSettings) closeSettings();
         }
         if (connected) wifiSetupShownForPortal = false;
+        wifiConnected = connected;
         if (networkStatus != status || wifiPortalActive != portal) {
             networkStatus = status; wifiPortalActive = portal; connectingScreenActive = false;
         }
+    }
+    // The update page (http://<address>/) is listening.
+    void updatePageState(bool ready) { updatePageReady = ready; }
+    // Called while a firmware arrives: the main loop is busy with the transfer,
+    // so the progress is drawn right away.
+    void firmwareUpdateProgress(const OtaImage::Progress &progress)
+    {
+        const bool starting = !firmwareUpdateActive;
+        if (starting)
+        {
+            // The progress must be visible even if the screen was asleep.
+            screenSleeping = false;
+            screenOffByUser = false;
+            currentBrightness = normalBrightness();
+            tft.setBrightness(currentBrightness);
+            firmwareUpdateActive = true;
+        }
+        firmwareUpdate = progress;
+        firmwareUpdateChangedAt = millis();
+        drawFirmwareUpdateScreen(starting || progress.phase != firmwareUpdateDrawnPhase);
     }
     void initializeTelemetry() {
         WiFi.mode(WIFI_STA);
@@ -1614,6 +1626,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 	void loop()
 	{
+		// A firmware update holds the whole screen until it ends; after an
+		// error the previous screen comes back by itself.
+		if (firmwareUpdateActive && !serviceFirmwareUpdateScreen()) return;
+
         updateTelemetry();
 		updateLedDiscovery();
 
@@ -1633,7 +1649,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Touch calibration is an idle-only recovery aid. Live telemetry always
 		// wins immediately, discarding any unconfirmed candidate so this screen
 		// can never hold the dashboard or its runtime services open.
-		if (settingsScreen == SettingsScreen::TouchCalibration && previousGameRunning)
+		// The update page screen has no timeout (the file takes a while to
+		// pick), so it gives way to live telemetry in the same way.
+		if ((settingsScreen == SettingsScreen::TouchCalibration ||
+			settingsScreen == SettingsScreen::FirmwareUpdate) && previousGameRunning)
 		{
 			closeSettings();
 		}
@@ -1641,10 +1660,11 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Keep reading touch while asleep so a tap can wake the display and a
 		// long press can open Settings.
         readTouch();
-        if (settingsScreen == SettingsScreen::WifiSettings &&
+        if ((settingsScreen == SettingsScreen::WifiSettings || settingsScreen == SettingsScreen::FirmwareUpdate) &&
             settingsPressedButton < 0 && millis() - settingsStatusRefresh > 1000) {
             settingsStatusRefresh = millis();
-            const String currentStatus = String(sourceName()) + ":" + networkStatus;
+            const String currentStatus = String(sourceName()) + ":" + networkStatus +
+                (wifiConnected && updatePageReady ? ":update" : "");
             if (prevData["connectionStatus"] != currentStatus) {
                 prevData["connectionStatus"] = currentStatus; drawSettingsScreen();
             }
@@ -1830,6 +1850,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 #include "dashboard/AnalysisWidgets.inc"
 #include "dashboard/SessionScreens.inc"
+#include "dashboard/FirmwareUpdateScreens.inc"
 #include "dashboard/themes/FormulaTheme.inc"
 #include "dashboard/themes/TrackMapTheme.inc"
 #include "dashboard/themes/TelemetryTheme.inc"
@@ -2268,7 +2289,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		tft.setTextDatum(TL_DATUM);
 	}
 
-	void drawWifiSetupQrCode()
+	void drawWifiSetupQrCode() { drawQrCode("WIFI:T:nopass;S:GT7-DASH-SETUP;;"); }
+
+	// QR code on the left of the setup screens (up to 53 characters).
+	void drawQrCode(const char *text)
 	{
 		static constexpr uint8_t QR_VERSION = 3;
 		static constexpr int QR_SCALE = 4;
@@ -2277,8 +2301,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		static constexpr int QR_Y = 47;
 		uint8_t qrData[128] = {};
 		QRCode qr;
-		if (qrcode_initText(&qr, qrData, QR_VERSION, ECC_LOW,
-			"WIFI:T:nopass;S:GT7-DASH-SETUP;;") != 0) return;
+		if (qrcode_initText(&qr, qrData, QR_VERSION, ECC_LOW, text) != 0) return;
 
 		const int outerSize = (qr.size + QR_QUIET_MODULES * 2) * QR_SCALE;
 		tft.fillRect(QR_X, QR_Y, outerSize, outerSize, TFT_WHITE);
@@ -2454,7 +2477,12 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			drawSettingsButton(212, 111, 88, 38, "SIMHUB", pressedButton == 3,
 				telemetry.mode == TelemetryMode::SimHub);
 			drawSettingsButton(20, 158, 280, 38, "RIPRISTINA DI FABBRICA", pressedButton == 4, false, true);
-			drawSettingsButton(20, 204, 280, 28, "INDIETRO", pressedButton == 5);
+			drawSettingsButton(20, 204, 136, 28, "AGGIORNAMENTO", pressedButton == 7);
+			drawSettingsButton(164, 204, 136, 28, "INDIETRO", pressedButton == 5);
+		}
+		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
+		{
+			drawFirmwareUpdateInfo(pressedButton);
 		}
 		else if (settingsScreen == SettingsScreen::ResetConfirmation)
 		{
@@ -2529,8 +2557,14 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 					telemetry.mode == TelemetryMode::SimHub);
 			else if (button == 4)
 				drawSettingsButton(20, 158, 280, 38, "RIPRISTINA DI FABBRICA", pressed, false, true);
+			else if (button == 7)
+				drawSettingsButton(20, 204, 136, 28, "AGGIORNAMENTO", pressed);
 			else if (button == 5)
-				drawSettingsButton(20, 204, 280, 28, "INDIETRO", pressed);
+				drawSettingsButton(164, 204, 136, 28, "INDIETRO", pressed);
+		}
+		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
+		{
+			if (button == 0) drawSettingsButton(105, 204, 110, 28, "INDIETRO", pressed);
 		}
 		else if (settingsScreen == SettingsScreen::ResetConfirmation)
 		{
@@ -2735,7 +2769,12 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 			if (touchInside(116, 111, 88, 38)) return 6;
 			if (touchInside(212, 111, 88, 38)) return 3;
 			if (touchInside(20, 158, 280, 38)) return 4;
-			if (touchInside(20, 204, 280, 28)) return 5;
+			if (touchInside(20, 204, 136, 28)) return 7;
+			if (touchInside(164, 204, 136, 28)) return 5;
+		}
+		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
+		{
+			if (touchInside(105, 204, 110, 28)) return 0;
 		}
 		else if (settingsScreen == SettingsScreen::ResetConfirmation)
 		{
@@ -2931,7 +2970,12 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 				requestConnection(TelemetryMode::AC, SettingsScreen::DeviceSettings);
 			else if (button == 3) selectConnection(TelemetryMode::SimHub);
 			else if (button == 4) showWifiResetConfirm();
+			else if (button == 7) showSettingsScreen(SettingsScreen::FirmwareUpdate);
 			else if (button == 5) showSettingsScreen(SettingsScreen::Main);
+		}
+		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
+		{
+			if (button == 0) showSettingsScreen(SettingsScreen::DeviceSettings);
 		}
         else if (settingsScreen == SettingsScreen::ResetConfirmation) {
             if (button == 1) {
@@ -3078,7 +3122,8 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 
 		if (settingsScreen != SettingsScreen::Closed)
 		{
-			if (!firstRun && settingsScreen != SettingsScreen::WifiSettings && !isTouched && settingsLastInteractionTime != 0 &&
+			if (!firstRun && settingsScreen != SettingsScreen::WifiSettings &&
+				settingsScreen != SettingsScreen::FirmwareUpdate && !isTouched && settingsLastInteractionTime != 0 &&
 				millis() - settingsLastInteractionTime >= SETTINGS_TIMEOUT_MS)
 			{
 				closeSettings();

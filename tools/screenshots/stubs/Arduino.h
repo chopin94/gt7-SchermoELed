@@ -94,6 +94,7 @@ public:
     int indexOf(char c, unsigned from = 0) const { return find(s_.find(c, from)); }
     int indexOf(const String &t, unsigned from = 0) const { return find(s_.find(t.s_, from)); }
     int lastIndexOf(char c) const { return find(s_.rfind(c)); }
+    int lastIndexOf(char c, unsigned from) const { return find(s_.rfind(c, from)); }
     int lastIndexOf(const String &t) const { return find(s_.rfind(t.s_)); }
     String substring(unsigned from) const { return from >= s_.size() ? String() : String(s_.substr(from)); }
     String substring(unsigned from, unsigned to) const

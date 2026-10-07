@@ -66,6 +66,9 @@ jobs:
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/telemetry.cpp -o /tmp/telemetry-tests && /tmp/telemetry-tests
       # Delta live, settori, mappa, forze G e cronometro (src/LapAnalysis.h)
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/lap_analysis.cpp -o /tmp/lap-tests && /tmp/lap-tests
+      # Aggiornamento via Wi-Fi (lib/OtaUpdate): controlli sul file e pagina /update
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/ota_image.cpp -o /tmp/ota-image-tests && /tmp/ota-image-tests
+      - run: g++ -std=gnu++11 -Wall -Wextra -fsanitize=address,undefined -I firmware/dashboard/tests/ota_stubs -I tools/screenshots/stubs -I firmware/dashboard/lib/OtaUpdate firmware/dashboard/tests/ota_web_update.cpp -o /tmp/ota-web-tests && /tmp/ota-web-tests
       # Compila il simulatore dello schermo: verifica che temi e menu disegnino senza errori
       - run: sudo apt-get install -y zlib1g-dev
       - run: tools/screenshots/build.sh /tmp/screenshots
