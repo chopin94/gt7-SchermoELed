@@ -5,7 +5,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 FW="$ROOT/firmware/dashboard"
-OUT="${1:-$ROOT/docs/screenshots}"
+OUT="${1:-$ROOT/docs/schermate}"
 CACHE="$HERE/.cache"
 BUILD="$CACHE/build"
 mkdir -p "$CACHE" "$BUILD" "$OUT"
@@ -35,5 +35,5 @@ for src in $(find "$LGFX/lgfx/Fonts" "$LGFX/lgfx/utility" -name '*.c') "$CACHE/Q
   [ -f "$obj" ] || gcc -O0 -w -I"$LGFX" -c "$src" -o "$obj"
   objs+=("$obj")
 done
-g++ -std=gnu++17 "${FLAGS[@]}" "${INCLUDES[@]}" "$HERE/render.cpp" "${objs[@]}" -lz -lpthread -o "$BUILD/render"
+g++ -std=gnu++11 "${FLAGS[@]}" "${INCLUDES[@]}" "$HERE/render.cpp" "${objs[@]}" -lz -lpthread -o "$BUILD/render"
 "$BUILD/render" "$OUT"

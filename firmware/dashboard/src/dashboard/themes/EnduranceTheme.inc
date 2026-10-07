@@ -487,15 +487,14 @@
 
 		drawEnduranceFuel(state, redraw);
 		uint16_t deltaColor = TFT_WHITE;
-		if (state.sessionBestLiveDeltaSeconds.startsWith("-")) deltaColor = green;
-		else if (state.sessionBestLiveDeltaSeconds.startsWith("+") &&
-			state.sessionBestLiveDeltaSeconds != "+0.000") deltaColor = red;
+		if (deltaSign(state.sessionBestLiveDeltaSeconds) < 0) deltaColor = green;
+		else if (deltaSign(state.sessionBestLiveDeltaSeconds) > 0) deltaColor = red;
 		if (redraw)
 		{
 			tft.drawRoundRect(127, 182, 91, 54, 4, line);
 			tft.setTextColor(muted, TFT_BLACK);
 			tft.setTextDatum(MC_DATUM);
-			tft.drawString("LAST DELTA", 172, 190, 1);
+			tft.drawString("DELTA", 172, 190, 1);
 			tft.setTextDatum(TL_DATUM);
 		}
 		drawEnduranceValueBuffered(130, 199, 85, 29,

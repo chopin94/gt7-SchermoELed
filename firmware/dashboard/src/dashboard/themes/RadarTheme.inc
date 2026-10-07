@@ -409,11 +409,10 @@
 		drawRadarPedals(state, redraw);
 
 		uint16_t deltaColor = TFT_WHITE;
-		if (state.sessionBestLiveDeltaSeconds.startsWith("-")) deltaColor = green;
-		else if (state.sessionBestLiveDeltaSeconds.startsWith("+") &&
-			state.sessionBestLiveDeltaSeconds != "+0.000") deltaColor = red;
+		if (deltaSign(state.sessionBestLiveDeltaSeconds) < 0) deltaColor = green;
+		else if (deltaSign(state.sessionBestLiveDeltaSeconds) > 0) deltaColor = red;
 		String deltaDisplay = state.sessionBestLiveDeltaSeconds;
-		if (deltaDisplay.startsWith("+") || deltaDisplay.startsWith("-"))
+		if (deltaDisplay != "--" && (deltaDisplay.startsWith("+") || deltaDisplay.startsWith("-")))
 			deltaDisplay = deltaDisplay.substring(0, 1) + " " + deltaDisplay.substring(1);
 		drawRadarValue(106, 218, 112, 17, deltaDisplay,
 			"radarDelta", deltaColor, 2, MC_DATUM, redraw, 1.14f, 1.0f);

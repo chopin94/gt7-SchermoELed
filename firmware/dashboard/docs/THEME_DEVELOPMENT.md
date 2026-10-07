@@ -31,6 +31,17 @@ The included themes are:
 | `FerrariAC` | 8 | `drawFerrariACDashboard()` | Ferrari layout for Assetto Corsa: clutch and lap progress, PIT lamp |
 | `FerrariGold` | 9 | `drawFerrariGoldDashboard()` | Ferrari layout with suggested-gear box |
 | `Bmw` | 10 | `drawBmwGoldDashboard()` | BMW M blue gear panel, clock and suggested gear |
+| `Formula` | 11 | `drawFormulaDashboard()` | Single-seater wheel: shift lights, live delta box, F1 sector colours, four tyres |
+| `TrackMap` | 12 | `drawTrackMapDashboard()` | Track map recorded during the first lap, car position, coloured sectors |
+| `Telemetry` | 13 | `drawTelemetryDashboard()` | G-force circle with trail, throttle and brake traces |
+| `Performance` | 14 | `drawPerformanceDashboard()` | Acceleration timer (0-100, 0-200, 100-200, 400 m) with drag-race tree |
+
+Themes 11-14 read the lap analysis (`src/LapAnalysis.h`, member `lapAnalysis`):
+live delta, sectors, map, G-forces, pedal traces, acceleration runs and session
+summary computed on the dashboard from the GT7 and Assetto Corsa data. Shared
+widgets live in `src/dashboard/AnalysisWidgets.inc`. They call
+`restoreDefaultText()` at the end so the other themes find LovyanGFX's default
+text settings.
 
 Persisted values are part of the device settings format. Never reorder or reuse an existing enum value.
 

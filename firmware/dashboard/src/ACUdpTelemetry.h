@@ -21,6 +21,7 @@ public:
         float gas = 0, brake = 0, clutch = 0, engineRpm = 0;
         int32_t gear = 1; // 0 = reverse, 1 = neutral, 2 = first gear
         float lapPosition = 0; // 0-1 along the lap
+        float x = 0, y = 0, z = 0; // world position in metres (y is up)
     };
 
     void begin() {
@@ -39,6 +40,8 @@ public:
 
     // True once after a handshake reports a different car than before.
     bool takeCarChanged() { const bool changed = carChanged; carChanged = false; return changed; }
+    // True once after a handshake reports a different track or layout.
+    bool takeTrackChanged() { const bool changed = trackChanged; trackChanged = false; return changed; }
 
     // Drains pending packets and keeps the subscription alive. Returns true
     // when `info` holds a new car update.
@@ -92,10 +95,11 @@ private:
     WiFiUDP udp;
     IPAddress server, lastServer;
     bool subscribed = false;
-    bool carChanged = false;
+    bool carChanged = false, trackChanged = false;
     uint32_t lastHandshake = 0, lastData = 0;
     uint16_t sweepHost = 1;
     char carName[51] = {};
+    char trackName[104] = {}; // "track|layout"
 
     // Asks the next few addresses of the local network (limited to the /24
     // around this device) for a handshake.
@@ -122,17 +126,33 @@ private:
         udp.endPacket();
     }
 
-    void handleHandshakeResponse(const uint8_t *buffer, uint32_t now) {
-        // carName: 50 UTF-16LE characters at the start of the response.
-        char name[51] = {};
+    // Copies a UTF-16LE string of 50 characters as ASCII.
+    static void readName(const uint8_t *buffer, char *out) {
         for (int i = 0; i < 50; ++i) {
             const uint16_t character = buffer[i * 2] | (buffer[i * 2 + 1] << 8);
-            if (character == 0) break;
-            name[i] = character < 128 ? static_cast<char>(character) : '?';
+            out[i] = character == 0 ? 0 : character < 128 ? static_cast<char>(character) : '?';
+            if (character == 0) return;
         }
+        out[50] = 0;
+    }
+
+    void handleHandshakeResponse(const uint8_t *buffer, uint32_t now) {
+        // Response: carName[50], driverName[50] (UTF-16LE), identifier,
+        // version, trackName[50], trackConfig[50].
+        char name[51] = {};
+        readName(buffer, name);
         if (strcmp(name, carName) != 0) {
             strcpy(carName, name);
             carChanged = true;
+        }
+        char track[104] = {};
+        readName(buffer + 208, track);
+        const size_t length = strlen(track);
+        track[length] = '|';
+        readName(buffer + 308, track + length + 1);
+        if (strcmp(track, trackName) != 0) {
+            strcpy(trackName, track);
+            trackChanged = true;
         }
         // Several handshakes may be answered (broadcast and sweep): subscribe once.
         if (subscribed) return;
@@ -168,5 +188,8 @@ private:
         info.engineRpm = field<float>(buffer, 68);
         info.gear = field<int32_t>(buffer, 76);
         info.lapPosition = field<float>(buffer, 308);
+        info.x = field<float>(buffer, 316);
+        info.y = field<float>(buffer, 320);
+        info.z = field<float>(buffer, 324);
     }
 };
