@@ -2938,6 +2938,11 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
                 if (dashboardPreferencesReady) dashboardPreferences.clear();
                 activeDashboardTheme = renderedDashboardTheme = previewDashboardTheme = DashboardTheme::GT3;
                 userBrightnessPercent = DEFAULT_BRIGHTNESS_PERCENT;
+                // Defaults of the waiting screen and of the FUNZIONI menu.
+                waitingBackground = 0;
+                notificationsEnabled = true;
+                liveDeltaMode = true;
+                notificationCount = 0;
                 touchRotation = pendingTouchRotation = TouchRotation::Deg0;
                 touchSetupRequired = true;
                 connectionChoiceCanCancel = false;
