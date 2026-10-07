@@ -541,12 +541,20 @@
 		// Bmw-red line under the rev LEDs.
 		tft.fillRect(0, 27, 320, 2, bmwRed());
 
-		// BMW M gear panel with a small tricolour at the top.
+		// BMW M gear panel with the three M stripes at the top (light blue,
+		// dark blue, red) on a black badge so they stand out on the panel.
 		tft.fillRoundRect(BMW_PANEL_X, BMW_PANEL_Y, BMW_PANEL_W,
 			BMW_PANEL_H, 10, bmwDarkBlue());
-		tft.fillRect(145, 37, 10, 3, tft.color565(0, 146, 70));
-		tft.fillRect(155, 37, 10, 3, TFT_WHITE);
-		tft.fillRect(165, 37, 10, 3, tft.color565(206, 43, 55));
+		const uint16_t stripes[3] = {
+			tft.color565(0, 154, 218), tft.color565(76, 60, 178), tft.color565(228, 0, 43)};
+		tft.fillRoundRect(141, 35, 39, 9, 2, TFT_BLACK);
+		for (int i = 0; i < 3; ++i)
+		{
+			// Slanted stripe: a parallelogram 9 px wide and 5 px high.
+			const int x = 144 + i * 11;
+			tft.fillTriangle(x + 3, 37, x + 12, 37, x, 41, stripes[i]);
+			tft.fillTriangle(x + 12, 37, x + 9, 41, x, 41, stripes[i]);
+		}
 
 		// Frames around the bar gauges.
 		const uint16_t frame = tft.color565(48, 48, 52);

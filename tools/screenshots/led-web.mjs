@@ -9,7 +9,7 @@ import path from 'node:path';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const out = process.argv[2] ?? path.join(root, 'docs/screenshots/led-web.png');
+const out = process.argv[2] ?? path.join(root, 'docs/schermate/led-web.png');
 const src = readFileSync(path.join(root, 'firmware/led-strip/src/main.cpp'), 'utf8');
 let html = src.match(/R"rawliteral\(([\s\S]*?)\)rawliteral"/)[1];
 

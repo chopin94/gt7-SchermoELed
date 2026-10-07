@@ -389,11 +389,10 @@
 		drawMonoValue(4, 111, 93, 27, state.bestLapTime,
 			"monoBest", white, 1, MC_DATUM, forceUpdate, 1.52f, 1.38f);
 		uint16_t deltaColor = white;
-		if (state.sessionBestLiveDeltaSeconds.startsWith("-")) deltaColor = white;
-		else if (state.sessionBestLiveDeltaSeconds.startsWith("+") &&
-			state.sessionBestLiveDeltaSeconds != "+0.000") deltaColor = muted;
+		if (deltaSign(state.sessionBestLiveDeltaSeconds) < 0) deltaColor = white;
+		else if (deltaSign(state.sessionBestLiveDeltaSeconds) > 0) deltaColor = muted;
 		String delta = state.sessionBestLiveDeltaSeconds;
-		if (delta.startsWith("+") || delta.startsWith("-"))
+		if (delta != "--" && (delta.startsWith("+") || delta.startsWith("-")))
 			delta = delta.substring(0, 1) + " " + delta.substring(1);
 		drawMonoValueBuffered(4, 158, 93, 25, delta, "monoDelta", deltaColor,
 			1, MC_DATUM, forceUpdate, deltaSprite, deltaSpriteCreated,

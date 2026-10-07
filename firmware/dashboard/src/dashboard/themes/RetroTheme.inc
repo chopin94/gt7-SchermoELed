@@ -293,9 +293,8 @@
 			currentSprite, currentSpriteCreated, 0.9f, 0.82f);
 
 		uint16_t deltaColor = ink;
-		if (state.sessionBestLiveDeltaSeconds.startsWith("-")) deltaColor = green;
-		else if (state.sessionBestLiveDeltaSeconds.startsWith("+") &&
-			state.sessionBestLiveDeltaSeconds != "+0.000") deltaColor = red;
+		if (deltaSign(state.sessionBestLiveDeltaSeconds) < 0) deltaColor = green;
+		else if (deltaSign(state.sessionBestLiveDeltaSeconds) > 0) deltaColor = red;
 		drawRetroTextValue(190, 148, 124, 8, state.sessionBestLiveDeltaSeconds,
 			"retroDelta", deltaColor, 1, MR_DATUM, forceUpdate);
 

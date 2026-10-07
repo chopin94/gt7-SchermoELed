@@ -1,6 +1,7 @@
 #include "TelemetrySource.h"
 #include "SimHubProtocol.h"
 #include "ACUdpTelemetry.h"
+#include "LapAnalysis.h"
 #include "DashboardWiFiCredentials.h"
 #include <qrcode.h>
 
@@ -148,6 +149,10 @@ enum class DashboardTheme : uint8_t
 	FerrariAC = 8,
 	FerrariGold = 9,
 	Bmw = 10,
+	Formula = 11,
+	TrackMap = 12,
+	Telemetry = 13,
+	Performance = 14,
 };
 
 struct DashboardThemeDescriptor
@@ -168,6 +173,10 @@ static constexpr DashboardThemeDescriptor DASHBOARD_THEMES[] = {
 	{DashboardTheme::FerrariAC, "FERRARI AC"},
 	{DashboardTheme::FerrariGold, "FERRARI GOLD"},
 	{DashboardTheme::Bmw, "BMW M"},
+	{DashboardTheme::Formula, "FORMULA"},
+	{DashboardTheme::TrackMap, "MAPPA PISTA"},
+	{DashboardTheme::Telemetry, "TELEMETRIA"},
+	{DashboardTheme::Performance, "PRESTAZIONI"},
 };
 static constexpr size_t DASHBOARD_THEME_COUNT =
 	sizeof(DASHBOARD_THEMES) / sizeof(DASHBOARD_THEMES[0]);
@@ -297,8 +306,37 @@ private:
     SimHubProtocol::GearFilter simHubGearFilter;
     uint32_t lastUsbCommandTime = 0, settingsStatusRefresh = 0;
     Preferences dashboardPreferences;
+	// Waiting screen: 0 minimal, 1 racing, 2 session summary.
+	static constexpr uint8_t WAITING_BACKGROUND_COUNT = 3;
 	uint8_t waitingBackground = 0;
 	uint8_t previewWaitingBackground = 0;
+
+	// Lap analysis of the direct sources (GT7 and Assetto Corsa): live delta,
+	// sectors, track map, G-forces, acceleration runs and session summary.
+	LapAnalysis::Analyzer lapAnalysis;
+	TelemetrySource analysisSource = TelemetrySource::None;
+	int32_t lastGT7CarCode = 0;
+	bool notificationsEnabled = true;
+	bool liveDeltaMode = true; // false: difference between the last and the best lap
+	String featuresStatus;     // confirmation line of the FUNZIONI screen
+
+	// Notifications shown full screen for a few seconds (best lap, last lap,
+	// fuel reserve), queued while another one is on screen.
+	struct DashboardNotification
+	{
+		LapAnalysis::EventType type = LapAnalysis::EventType::BestLap;
+		int32_t lapMs = -1;
+		int32_t gainMs = -1;
+		String detail;
+		uint32_t queuedAt = 0;
+	};
+	static constexpr int NOTIFICATION_QUEUE = 3;
+	static constexpr uint32_t NOTIFICATION_MS = 3000;
+	DashboardNotification notificationQueue[NOTIFICATION_QUEUE];
+	int notificationCount = 0;
+	bool notificationActive = false;
+	uint32_t notificationStart = 0;
+	DashboardNotification shownNotification;
 	DashboardTheme activeDashboardTheme = DashboardTheme::GT3;
 	DashboardTheme renderedDashboardTheme = DashboardTheme::GT3;
 	DashboardTheme previewDashboardTheme = DashboardTheme::GT3;
@@ -365,6 +403,7 @@ private:
 		ResetConfirmation,
 		TouchCalibration,
 		LedSettings,
+		Features,
 	};
 
 	static constexpr unsigned long SETTINGS_TIMEOUT_MS = 15000UL;
@@ -579,6 +618,11 @@ private:
 			touchRotation = storedTouchRotation <= static_cast<uint8_t>(TouchRotation::Deg270)
 				? static_cast<TouchRotation>(storedTouchRotation)
 				: TouchRotation::Deg0;
+			// Saved from the SFONDO ATTESA screen; was never read back before.
+			const uint8_t storedBackground = dashboardPreferences.getUChar("waitbg", 0);
+			waitingBackground = storedBackground < WAITING_BACKGROUND_COUNT ? storedBackground : 0;
+			notificationsEnabled = dashboardPreferences.getUChar("notify", 1) != 0;
+			liveDeltaMode = dashboardPreferences.getUChar("deltamode", 0) == 0;
 		}
 		else
 		{
@@ -590,7 +634,7 @@ private:
 			? static_cast<DashboardTheme>(storedTheme)
 			: DashboardTheme::GT3;
 
-#if GT7_DASHBOARD_THEME_PREVIEW >= 0 && GT7_DASHBOARD_THEME_PREVIEW <= 10
+#if GT7_DASHBOARD_THEME_PREVIEW >= 0 && GT7_DASHBOARD_THEME_PREVIEW <= 14
 		activeDashboardTheme =
 			static_cast<DashboardTheme>(GT7_DASHBOARD_THEME_PREVIEW);
 #endif
@@ -1169,14 +1213,83 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		state.brake = "0";
 		state.lapInvalidated = "False";
 
+		// Lap analysis: live delta, sectors, track map, G-forces, runs.
+		// Another car on the same circuit: the times start over, the map stays.
+		if (data.carCode != 0 && lastGT7CarCode != 0 && data.carCode != lastGT7CarCode)
+			lapAnalysis.resetTiming();
+		if (data.carCode != 0) lastGT7CarCode = data.carCode;
+		LapAnalysis::Sample sample;
+		// GT7 sends one packet per frame at 60 Hz: the packet id is the clock.
+		sample.timeMs = static_cast<uint32_t>(static_cast<int64_t>(packetId) * 50 / 3);
+		sample.speed = isfinite(data.speed) ? data.speed : 0.0f;
+		sample.hasPosition = isfinite(data.position[0]) && isfinite(data.position[2]);
+		sample.x = data.position[0];
+		sample.y = isfinite(data.position[1]) ? data.position[1] : 0.0f;
+		sample.z = data.position[2];
+		sample.hasVelocity = isfinite(data.worldVelocity[0]) && isfinite(data.worldVelocity[2]);
+		sample.vx = data.worldVelocity[0];
+		sample.vz = data.worldVelocity[2];
+		sample.lapCount = data.lapCount;
+		sample.totalLaps = data.totalLaps;
+		sample.lapTimeMs = data.currentLap >= 0 ? data.currentLap : -1;
+		sample.lastLapMs = data.lastLaptime;
+		sample.driving = gt7CarOnTrack && !flagSet(SimulatorFlags::Paused) &&
+			!flagSet(SimulatorFlags::LoadingOrProcessing);
+		sample.throttle = data.throttle / 255.0f;
+		sample.brake = data.brake / 255.0f;
+		sample.fuelFraction = validIceFuel ? data.fuelLevel / data.fuelCapacity : NAN;
+		sample.fuelLaps = !state.fuelIsEV && estimatedFuelLaps >= 0.0f ? estimatedFuelLaps : NAN;
+		lapAnalysis.update(sample);
+		if (liveDeltaMode) state.sessionBestLiveDeltaSeconds = liveDeltaText();
+		takeAnalysisEvents(state);
+
 		return true;
+	}
+
+	// Live delta for the themes: "-0.237", or "--" before a reference lap.
+	String liveDeltaText() const
+	{
+		if (!lapAnalysis.hasLiveDelta()) return "--";
+		const int32_t ms = constrain(lapAnalysis.liveDeltaMs(), -99999, 99999);
+		char buffer[12];
+		snprintf(buffer, sizeof(buffer), "%c%d.%03d", ms < 0 ? '-' : '+', abs(ms) / 1000, abs(ms) % 1000);
+		return String(buffer);
+	}
+
+	// Queues the notifications produced by the lap analysis.
+	void takeAnalysisEvents(const DashboardState &state)
+	{
+		LapAnalysis::Event event;
+		while (lapAnalysis.takeEvent(event))
+		{
+			if (!notificationsEnabled) continue;
+			DashboardNotification notification;
+			notification.type = event.type;
+			notification.lapMs = event.lapMs;
+			notification.gainMs = event.gainMs;
+			notification.queuedAt = millis();
+			if (event.type == LapAnalysis::EventType::FinalLap)
+				notification.detail = "GIRO " + state.tyrePressureRearLeft;
+			else if (event.type == LapAnalysis::EventType::LowFuel)
+				notification.detail = state.tyrePressureFrontLeft != "--"
+					? state.tyrePressureFrontLeft + " GIRI"
+					: state.fuelDisplayValue + "%";
+			if (notificationCount == NOTIFICATION_QUEUE)
+			{
+				for (int i = 1; i < NOTIFICATION_QUEUE; ++i) notificationQueue[i - 1] = notificationQueue[i];
+				notificationCount--;
+			}
+			notificationQueue[notificationCount++] = notification;
+		}
 	}
 
 	bool readACWifi(DashboardState &state)
 	{
 		ACUdpTelemetry::CarInfo car;
 		const bool updated = acTelem.poll(millis(), car);
-		if (acTelem.takeCarChanged()) { acPeakRpm = acLimiterRpm = 0.0f; }
+		if (acTelem.takeCarChanged()) { acPeakRpm = acLimiterRpm = 0.0f; lapAnalysis.resetTiming(); }
+		// Another circuit or layout: map, references and session start over.
+		if (acTelem.takeTrackChanged()) lapAnalysis.reset();
 		if (!updated) return false;
 
 		state.speed = String(static_cast<int>(max(0.0f, car.speedKmh)));
@@ -1248,6 +1361,26 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		telemetry.ac.received = true;
 		telemetry.ac.time = millis();
 		telemetry.ac.running = true;
+
+		// Lap analysis: AC reports the fraction of the lap and the position,
+		// the heading comes from the positions.
+		LapAnalysis::Sample sample;
+		sample.timeMs = millis();
+		sample.speed = max(0.0f, car.speedKmh) / 3.6f;
+		sample.hasPosition = isfinite(car.x) && isfinite(car.z);
+		sample.x = car.x;
+		sample.y = isfinite(car.y) ? car.y : 0.0f;
+		sample.z = car.z;
+		sample.lapCount = car.lapCount;
+		sample.lapTimeMs = car.lapTimeMs >= 0 ? car.lapTimeMs : -1;
+		sample.lastLapMs = car.lastLapMs > 0 ? car.lastLapMs : -1;
+		sample.lapFraction = isfinite(state.lapProgress) ? state.lapProgress : NAN;
+		sample.inPit = car.inPit;
+		sample.throttle = constrain(car.gas, 0.0f, 1.0f);
+		sample.brake = constrain(car.brake, 0.0f, 1.0f);
+		lapAnalysis.update(sample);
+		if (liveDeltaMode) state.sessionBestLiveDeltaSeconds = liveDeltaText();
+		takeAnalysisEvents(state);
 		return true;
 	}
 
@@ -1453,6 +1586,12 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         now = millis();
         const TelemetrySource before = telemetry.active;
         const TelemetrySource selected = firstRun ? TelemetrySource::None : telemetry.update(now);
+        // Another game: the lap analysis starts over. A pause in the data of
+        // the same game (menus, PS5 standby) keeps the map and the session.
+        if (selected != TelemetrySource::None && selected != analysisSource) {
+            if (analysisSource != TelemetrySource::None) lapAnalysis.reset();
+            analysisSource = selected;
+        }
         if (before != selected) {
             resetLapDifference(); derivedMetrics.reset();
             static_cast<DashboardState &>(*this) = DashboardState();
@@ -1558,7 +1697,17 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		if (activeDashboardTheme != renderedDashboardTheme)
 		{
 			renderedDashboardTheme = activeDashboardTheme;
+			// The telemetry graphs use about 36 KB of sprites: free them for
+			// the other themes.
+			if (activeDashboardTheme != DashboardTheme::Telemetry) releaseTelemetrySprites();
 			invalidateDashboardRenderer();
+		}
+
+		// Best lap, last lap and fuel reserve take the screen for a moment.
+		if (currentPage == 1 && serviceNotification(static_cast<DashboardState &>(*this)))
+		{
+			forceUpdate = false;
+			return;
 		}
 
 		if (currentPage == 1)
@@ -1610,6 +1759,18 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		case DashboardTheme::Bmw:
 			drawBmwGoldDashboard(state, forceUpdate); // We use BmwGoldDashboard as the base
 			break;
+		case DashboardTheme::Formula:
+			drawFormulaDashboard(state, forceUpdate);
+			break;
+		case DashboardTheme::TrackMap:
+			drawTrackMapDashboard(state, forceUpdate);
+			break;
+		case DashboardTheme::Telemetry:
+			drawTelemetryDashboard(state, forceUpdate);
+			break;
+		case DashboardTheme::Performance:
+			drawPerformanceDashboard(state, forceUpdate);
+			break;
 		case DashboardTheme::GT3:
 		default:
 #if GT7_DASHBOARD_LEGACY_UI
@@ -1619,6 +1780,16 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 #endif
 			break;
 		}
+	}
+
+	// Sign of a delta string: -1 ahead (green), +1 behind (red), 0 for zero
+	// or unknown ("--" before a reference lap).
+	static int deltaSign(const String &delta)
+	{
+		if (delta.length() < 2 || delta == "--") return 0;
+		if (delta[0] == '-') return -1;
+		if (delta[0] == '+' && delta != "+0.000") return 1;
+		return 0;
 	}
 
 	static uint16_t blendRgb565(uint16_t from, uint16_t to, uint8_t amount)
@@ -1656,6 +1827,13 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 #include "dashboard/themes/FerrariTheme.inc"
 #include "dashboard/themes/BmwTheme.inc"
+
+#include "dashboard/AnalysisWidgets.inc"
+#include "dashboard/SessionScreens.inc"
+#include "dashboard/themes/FormulaTheme.inc"
+#include "dashboard/themes/TrackMapTheme.inc"
+#include "dashboard/themes/TelemetryTheme.inc"
+#include "dashboard/themes/PerformanceTheme.inc"
 
 	void drawThemePlaceholder(
 		const DashboardState &state,
@@ -1699,6 +1877,9 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
         if (waitingBackground == 1) {
             tft.pushImage(0, 0, sparco_racing_bg_width, sparco_racing_bg_height, sparco_racing_bg);
+        } else if (waitingBackground == 2) {
+            tft.fillScreen(TFT_BLACK);
+            drawSessionSummary();
         } else {
             tft.fillScreen(bgBlue);
         }
@@ -1922,6 +2103,44 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		tft.drawString(label, x + width / 2, y + height / 2, 2);
 	}
 
+	// Buttons of the menus laid out as tables: drawing, pressed state and
+	// touch areas all come from the same coordinates.
+	struct MenuButton
+	{
+		int id, x, y, w, h;
+		const char *label;
+	};
+	static constexpr int MAIN_MENU_BUTTONS = 6;
+	static const MenuButton *mainMenu()
+	{
+		static const MenuButton buttons[MAIN_MENU_BUTTONS] = {
+			{0, 10, 40, 146, 56, "SELEZIONA TEMA"}, {4, 164, 40, 146, 56, "SFONDO ATTESA"},
+			{6, 10, 104, 146, 56, "FUNZIONI"}, {3, 164, 104, 146, 56, "IMPOSTAZIONI LED"},
+			{1, 10, 168, 146, 56, "DISPOSITIVO"}, {2, 164, 168, 146, 56, "INDIETRO"}};
+		return buttons;
+	}
+	static constexpr int FEATURE_BUTTONS = 6;
+	static const MenuButton *featureMenu()
+	{
+		static const MenuButton buttons[FEATURE_BUTTONS] = {
+			{0, 20, 52, 136, 34, "SI"}, {1, 164, 52, 136, 34, "NO"},
+			{2, 20, 112, 136, 34, "LIVE"}, {3, 164, 112, 136, 34, "ULTIMO GIRO"},
+			{4, 20, 154, 280, 32, "AZZERA MAPPA E TEMPI"}, {5, 105, 206, 110, 28, "INDIETRO"}};
+		return buttons;
+	}
+
+	void drawMenuButton(const MenuButton &b, bool pressed)
+	{
+		bool active = false, destructive = false;
+		if (settingsScreen == SettingsScreen::Features)
+		{
+			active = (b.id == 0 && notificationsEnabled) || (b.id == 1 && !notificationsEnabled) ||
+				(b.id == 2 && liveDeltaMode) || (b.id == 3 && !liveDeltaMode);
+			destructive = b.id == 4;
+		}
+		drawSettingsButton(b.x, b.y, b.w, b.h, b.label, pressed, active, destructive);
+	}
+
 	void drawDeviceBrightnessValue()
 	{
 		drawSettingsButton(80, 50, 160, 38,
@@ -2086,11 +2305,23 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		{
 			tft.setTextColor(TFT_WHITE, TFT_BLACK);
 			tft.drawString("IMPOSTAZIONI", X_CENTER, 20, 4);
-			drawSettingsButton(20, 36, 280, 35, "SELEZIONA TEMA", pressedButton == 0);
-			drawSettingsButton(20, 76, 280, 35, "SFONDO ATTESA", pressedButton == 4);
-			drawSettingsButton(20, 116, 280, 35, "IMPOSTAZ. DISPOSITIVO", pressedButton == 1);
-			drawSettingsButton(20, 156, 280, 35, "IMPOSTAZIONI LED", pressedButton == 3);
-			drawSettingsButton(20, 196, 280, 35, "INDIETRO", pressedButton == 2);
+			for (int i = 0; i < MAIN_MENU_BUTTONS; ++i)
+				drawMenuButton(mainMenu()[i], pressedButton == mainMenu()[i].id);
+		}
+		else if (settingsScreen == SettingsScreen::Features)
+		{
+			tft.setTextColor(TFT_WHITE, TFT_BLACK);
+			tft.drawString("FUNZIONI", X_CENTER, 18, 4);
+			tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+			tft.drawString("NOTIFICHE A SCHERMO", X_CENTER, 42, 2);
+			tft.drawString("DELTA NEI TEMI", X_CENTER, 102, 2);
+			for (int i = 0; i < FEATURE_BUTTONS; ++i)
+				drawMenuButton(featureMenu()[i], pressedButton == featureMenu()[i].id);
+			tft.setTextDatum(MC_DATUM);
+			tft.setTextColor(featuresStatus.length() ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
+			tft.drawString(featuresStatus.length() ? featuresStatus
+				: String(liveDeltaMode ? "Delta metro per metro sul giro migliore" : "Differenza ultimo giro - migliore"),
+				X_CENTER, 197, 1);
 		}
         else if (settingsScreen == SettingsScreen::InitialTouch) {
             tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -2141,15 +2372,22 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		{
             if (previewWaitingBackground == 1) {
                 tft.pushImage(0, 0, sparco_racing_bg_width, sparco_racing_bg_height, sparco_racing_bg);
+            } else if (previewWaitingBackground == 2) {
+                tft.fillScreen(TFT_BLACK);
+                drawSessionSummary();
             } else {
                 tft.fillScreen(tft.color565(18, 22, 120));
                 int logoY = (SCREEN_HEIGHT - sparco_logo_height) / 2;
                 tft.pushImage((SCREEN_WIDTH - sparco_logo_width)/2, logoY, sparco_logo_width, sparco_logo_height, sparco_logo);
             }
             
+            static const char *const backgroundNames[WAITING_BACKGROUND_COUNT] = {"MINIMALE", "RACING", "RIEPILOGO"};
+            tft.setFont(&fonts::Font4);
+            tft.setTextSize(1.0f);
+            tft.setTextDatum(MC_DATUM);
             tft.setTextColor(TFT_WHITE, TFT_BLACK);
             tft.fillRect(0, 0, SCREEN_WIDTH, 40, TFT_BLACK);
-            tft.drawString(previewWaitingBackground == 0 ? "MINIMALE" : "RACING", X_CENTER, 20, 4);
+            tft.drawString(backgroundNames[previewWaitingBackground % WAITING_BACKGROUND_COUNT], X_CENTER, 20, 4);
             tft.drawString("<", 20, 20, 4);
             tft.drawString(">", SCREEN_WIDTH - 20, 20, 4);
 
@@ -2248,16 +2486,13 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         }
 		if (settingsScreen == SettingsScreen::Main)
 		{
-			if (button == 0)
-				drawSettingsButton(20, 36, 280, 35, "SELEZIONA TEMA", pressed);
-			else if (button == 4)
-				drawSettingsButton(20, 76, 280, 35, "SFONDO ATTESA", pressed);
-			else if (button == 1)
-				drawSettingsButton(20, 116, 280, 35, "IMPOSTAZ. DISPOSITIVO", pressed);
-			else if (button == 3)
-				drawSettingsButton(20, 156, 280, 35, "IMPOSTAZIONI LED", pressed);
-			else if (button == 2)
-				drawSettingsButton(20, 196, 280, 35, "INDIETRO", pressed);
+			for (int i = 0; i < MAIN_MENU_BUTTONS; ++i)
+				if (mainMenu()[i].id == button) drawMenuButton(mainMenu()[i], pressed);
+		}
+		else if (settingsScreen == SettingsScreen::Features)
+		{
+			for (int i = 0; i < FEATURE_BUTTONS; ++i)
+				if (featureMenu()[i].id == button) drawMenuButton(featureMenu()[i], pressed);
 		}
 		else if (settingsScreen == SettingsScreen::ThemeSelection)
 		{
@@ -2450,11 +2685,15 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
         }
 		if (settingsScreen == SettingsScreen::Main)
 		{
-			if (touchInside(20, 36, 280, 35)) return 0;
-			if (touchInside(20, 76, 280, 35)) return 4;
-			if (touchInside(20, 116, 280, 35)) return 1;
-			if (touchInside(20, 156, 280, 35)) return 3;
-			if (touchInside(20, 196, 280, 35)) return 2;
+			for (int i = 0; i < MAIN_MENU_BUTTONS; ++i)
+				if (touchInside(mainMenu()[i].x, mainMenu()[i].y, mainMenu()[i].w, mainMenu()[i].h))
+					return mainMenu()[i].id;
+		}
+		else if (settingsScreen == SettingsScreen::Features)
+		{
+			for (int i = 0; i < FEATURE_BUTTONS; ++i)
+				if (touchInside(featureMenu()[i].x, featureMenu()[i].y, featureMenu()[i].w, featureMenu()[i].h))
+					return featureMenu()[i].id;
 		}
 		else if (settingsScreen == SettingsScreen::ThemeSelection)
 		{
@@ -2547,14 +2786,50 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
                 fetchLedSettings();
 				showSettingsScreen(SettingsScreen::LedSettings);
             }
+			else if (button == 6)
+			{
+				featuresStatus = "";
+				showSettingsScreen(SettingsScreen::Features);
+			}
 			else if (button == 2)
 				closeSettings();
+		}
+		else if (settingsScreen == SettingsScreen::Features)
+		{
+			if (button == 0 || button == 1)
+			{
+				notificationsEnabled = button == 0;
+				if (!notificationsEnabled) notificationCount = 0;
+				if (dashboardPreferencesReady) dashboardPreferences.putUChar("notify", notificationsEnabled ? 1 : 0);
+				featuresStatus = "";
+			}
+			else if (button == 2 || button == 3)
+			{
+				liveDeltaMode = button == 2;
+				if (dashboardPreferencesReady) dashboardPreferences.putUChar("deltamode", liveDeltaMode ? 0 : 1);
+				featuresStatus = "";
+			}
+			else if (button == 4)
+			{
+				lapAnalysis.reset();
+				notificationCount = 0;
+				featuresStatus = "Mappa, tempi e prove azzerati";
+			}
+			else if (button == 5)
+			{
+				showSettingsScreen(SettingsScreen::Main);
+				return;
+			}
+			settingsLastInteractionTime = millis();
+			drawSettingsScreen();
 		}
 		else if (settingsScreen == SettingsScreen::BackgroundSelection)
 		{
 			if (button == 0 || button == 1)
 			{
-				previewWaitingBackground = (previewWaitingBackground == 0) ? 1 : 0;
+				// Left arrow: previous, right arrow: next.
+				previewWaitingBackground = (previewWaitingBackground +
+					(button == 0 ? WAITING_BACKGROUND_COUNT - 1 : 1)) % WAITING_BACKGROUND_COUNT;
 				settingsLastInteractionTime = millis();
 				drawSettingsScreen();
 			}

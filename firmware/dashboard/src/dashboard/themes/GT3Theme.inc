@@ -62,8 +62,8 @@
 			MC_DATUM, forceUpdate, speedSprite, speedSpriteCreated, 0.72f, 0.72f);
 
 		uint16_t deltaColor = TFT_WHITE;
-		if (state.sessionBestLiveDeltaSeconds.startsWith("-")) deltaColor = TFT_GREEN;
-		else if (state.sessionBestLiveDeltaSeconds.startsWith("+") && state.sessionBestLiveDeltaSeconds != "+0.000") deltaColor = TFT_RED;
+		if (deltaSign(state.sessionBestLiveDeltaSeconds) < 0) deltaColor = TFT_GREEN;
+		else if (deltaSign(state.sessionBestLiveDeltaSeconds) > 0) deltaColor = TFT_RED;
 		drawDashboardValue(DashboardLayout::LEFT_X, DashboardLayout::DELTA_VALUE_Y,
 			DashboardLayout::SIDE_WIDTH, DashboardLayout::DELTA_VALUE_H,
 			state.sessionBestLiveDeltaSeconds, "gt3Delta", deltaColor, &fonts::FreeSans18pt7b,

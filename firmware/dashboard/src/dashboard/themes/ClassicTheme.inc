@@ -43,13 +43,12 @@
 
 		// 右上：上一圈相對最佳圈的差值。
 		uint16_t lastBestColor = TFT_WHITE;
-		if (state.sessionBestLiveDeltaSeconds.startsWith("-"))
+		if (deltaSign(state.sessionBestLiveDeltaSeconds) < 0)
 		{
 			lastBestColor = TFT_GREEN;
 		}
 		else if (
-			state.sessionBestLiveDeltaSeconds.startsWith("+") &&
-			state.sessionBestLiveDeltaSeconds != "+0.000")
+			deltaSign(state.sessionBestLiveDeltaSeconds) > 0)
 		{
 			lastBestColor = TFT_RED;
 		}
