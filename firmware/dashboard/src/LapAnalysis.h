@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <new>
 
 // Lap analysis computed on the dashboard from the raw telemetry of GT7 and
 // Assetto Corsa: live delta against the best lap, sector times, a track map
@@ -128,7 +129,15 @@ struct LaunchRun
 class Analyzer
 {
 public:
-    Analyzer() { reset(); }
+    // The lap times and the map points (about 22 KB) live on the heap: the
+    // ESP32 has much less room for static data than for allocations.
+    Analyzer() : buffers(new (std::nothrow) Buffers) { reset(); }
+    ~Analyzer() { delete buffers; }
+    Analyzer(const Analyzer &) = delete;
+    Analyzer &operator=(const Analyzer &) = delete;
+
+    // False if the buffers could not be allocated: no analysis then.
+    bool available() const { return buffers != nullptr; }
 
     // Forgets everything: map, best lap, sectors, session and runs.
     void reset()
@@ -214,6 +223,7 @@ public:
 
     void update(const Sample &s)
     {
+        if (!buffers) return;
         lastTimeMs = s.timeMs;
         if (!s.driving)
         {
@@ -264,11 +274,15 @@ public:
 
     // ---- Track map -----------------------------------------------------------
     MapState mapState() const { return map.state; }
-    int mapPointCount() const { return map.state == MapState::Complete ? MAP_POINTS : map.rawCount; }
+    int mapPointCount() const
+    {
+        if (!buffers) return 0;
+        return map.state == MapState::Complete ? MAP_POINTS : map.rawCount;
+    }
     void mapPoint(int i, float &x, float &z) const
     {
-        if (map.state == MapState::Complete) { x = map.x[i]; z = map.z[i]; }
-        else { x = map.rawX[i]; z = map.rawZ[i]; }
+        if (map.state == MapState::Complete) { x = buffers->mapX[i]; z = buffers->mapZ[i]; }
+        else { x = buffers->rawX[i]; z = buffers->rawZ[i]; }
     }
     // Sector of a point of the completed map (the map starts at the line).
     static int mapPointSector(int i) { return i * SECTORS / MAP_POINTS; }
@@ -403,15 +417,22 @@ private:
     struct MapData
     {
         MapState state = MapState::Waiting;
-        float rawX[MAP_RAW_POINTS];
-        float rawZ[MAP_RAW_POINTS];
         int rawCount = 0;
         float spacing = MAP_FIRST_SPACING_M;
         float lastRawDistance = 0;
-        float x[MAP_POINTS];
-        float z[MAP_POINTS];
         float minX = 0, minZ = 0, maxX = 0, maxZ = 0;
     };
+
+    struct Buffers
+    {
+        uint32_t curTime[DELTA_CELLS]; // lap time at each cell of this lap
+        uint32_t refTime[DELTA_CELLS]; // the same for the reference lap
+        float rawX[MAP_RAW_POINTS];    // map being recorded
+        float rawZ[MAP_RAW_POINTS];
+        float mapX[MAP_POINTS];        // completed map
+        float mapZ[MAP_POINTS];
+    };
+    Buffers *buffers;
 
     struct LaunchState
     {
@@ -440,8 +461,6 @@ private:
     int32_t pendingMeasuredMs = -1;
     LapState lap;
 
-    uint32_t curTime[DELTA_CELLS];
-    uint32_t refTime[DELTA_CELLS];
     int32_t refLapMs = -1;
     int refCells = 0;
     int lapCells = 0; // lap length in delta cells, 0 while unknown
@@ -589,7 +608,7 @@ private:
                 // The cells up to here belong to the line.
                 const uint32_t t = s.lapTimeMs >= 0 ? static_cast<uint32_t>(s.lapTimeMs) : 0;
                 const int cells = static_cast<int>(floorf(lap.progress));
-                for (int c = 0; c <= cells && c < DELTA_CELLS; ++c) curTime[c] = t;
+                for (int c = 0; c <= cells && c < DELTA_CELLS; ++c) buffers->curTime[c] = t;
                 lap.maxCell = cells < DELTA_CELLS ? cells : DELTA_CELLS - 1;
             }
             lap.sector = sectorOf(lap.progress);
@@ -650,7 +669,7 @@ private:
             for (int c = lap.maxCell + 1; c < DELTA_CELLS; ++c)
             {
                 const float k = end > p0 ? (c - p0) / (end - p0) : 1.0f;
-                curTime[c] = static_cast<uint32_t>(lap.lastTime + (lapMs - lap.lastTime) * clampf(k, 0, 1));
+                buffers->curTime[c] = static_cast<uint32_t>(lap.lastTime + (lapMs - lap.lastTime) * clampf(k, 0, 1));
             }
             lap.maxCell = DELTA_CELLS - 1;
         }
@@ -693,7 +712,7 @@ private:
         {
             refLapMs = lapMs;
             refCells = lapFractionMode ? DELTA_CELLS : cellsDriven;
-            memcpy(refTime, curTime, sizeof(uint32_t) * refCells);
+            memcpy(buffers->refTime, buffers->curTime, sizeof(uint32_t) * refCells);
             if (!lapFractionMode) lapCells = refCells;
             for (int i = 0; i < SECTORS; ++i) refSector[i] = lap.sectorMs[i];
         }
@@ -710,7 +729,7 @@ private:
         const int c = static_cast<int>(floorf(p));
         if (c < 0 || c + 1 >= cells) return -1;
         const float f = p - c;
-        return static_cast<int32_t>(curTime[c] + (static_cast<float>(curTime[c + 1]) - curTime[c]) * f);
+        return static_cast<int32_t>(buffers->curTime[c] + (static_cast<float>(buffers->curTime[c + 1]) - buffers->curTime[c]) * f);
     }
 
     void storeLap(const LapRecord &record)
@@ -812,7 +831,7 @@ private:
             for (int c = first; c <= lastCell && c < DELTA_CELLS; ++c)
             {
                 const float k = (c - p0) / (p - p0);
-                curTime[c] = static_cast<uint32_t>(t0 + (t - t0) * k);
+                buffers->curTime[c] = static_cast<uint32_t>(t0 + (t - t0) * k);
                 // Joining mid-lap (fraction mode) leaves the cells before unknown.
                 if (lap.maxCell < 0 && c > 0 && !lap.observed) lap.continuous = false;
                 lap.maxCell = c;
@@ -846,7 +865,7 @@ private:
             if (c >= 0 && c + 1 < refCells)
             {
                 const float f = p - c;
-                const float ref = refTime[c] + (static_cast<float>(refTime[c + 1]) - refTime[c]) * f;
+                const float ref = buffers->refTime[c] + (static_cast<float>(buffers->refTime[c + 1]) - buffers->refTime[c]) * f;
                 liveDelta = static_cast<int32_t>(lroundf(t - ref));
                 liveDeltaValid = true;
             }
@@ -860,15 +879,15 @@ private:
             // Full: keep every other point and double the spacing.
             for (int i = 0; i < MAP_RAW_POINTS / 2; ++i)
             {
-                map.rawX[i] = map.rawX[i * 2];
-                map.rawZ[i] = map.rawZ[i * 2];
+                buffers->rawX[i] = buffers->rawX[i * 2];
+                buffers->rawZ[i] = buffers->rawZ[i * 2];
             }
             map.rawCount = MAP_RAW_POINTS / 2;
             map.spacing *= 2;
         }
         if (map.rawCount == 0) { map.minX = map.maxX = x; map.minZ = map.maxZ = z; }
-        map.rawX[map.rawCount] = x;
-        map.rawZ[map.rawCount] = z;
+        buffers->rawX[map.rawCount] = x;
+        buffers->rawZ[map.rawCount] = z;
         map.rawCount++;
         if (x < map.minX) map.minX = x;
         if (x > map.maxX) map.maxX = x;
@@ -897,14 +916,14 @@ private:
         for (int i = 0; i < n; ++i)
         {
             const int j = (i + 1) % n;
-            total += hypotf(map.rawX[j] - map.rawX[i], map.rawZ[j] - map.rawZ[i]);
+            total += hypotf(buffers->rawX[j] - buffers->rawX[i], buffers->rawZ[j] - buffers->rawZ[i]);
         }
         if (n < 24 || total < 300.0f) { map.state = MapState::Waiting; map.rawCount = 0; mapRev++; return; }
 
         const float step = total / MAP_POINTS;
         int segment = 0;
         float segmentStart = 0;
-        float segmentLength = hypotf(map.rawX[1 % n] - map.rawX[0], map.rawZ[1 % n] - map.rawZ[0]);
+        float segmentLength = hypotf(buffers->rawX[1 % n] - buffers->rawX[0], buffers->rawZ[1 % n] - buffers->rawZ[0]);
         for (int k = 0; k < MAP_POINTS; ++k)
         {
             const float target = k * step;
@@ -913,21 +932,21 @@ private:
                 segmentStart += segmentLength;
                 segment++;
                 const int next = (segment + 1) % n;
-                segmentLength = hypotf(map.rawX[next] - map.rawX[segment], map.rawZ[next] - map.rawZ[segment]);
+                segmentLength = hypotf(buffers->rawX[next] - buffers->rawX[segment], buffers->rawZ[next] - buffers->rawZ[segment]);
             }
             const int next = (segment + 1) % n;
             const float f = segmentLength > 0 ? clampf((target - segmentStart) / segmentLength, 0, 1) : 0;
-            map.x[k] = map.rawX[segment] + (map.rawX[next] - map.rawX[segment]) * f;
-            map.z[k] = map.rawZ[segment] + (map.rawZ[next] - map.rawZ[segment]) * f;
+            buffers->mapX[k] = buffers->rawX[segment] + (buffers->rawX[next] - buffers->rawX[segment]) * f;
+            buffers->mapZ[k] = buffers->rawZ[segment] + (buffers->rawZ[next] - buffers->rawZ[segment]) * f;
         }
-        map.minX = map.maxX = map.x[0];
-        map.minZ = map.maxZ = map.z[0];
+        map.minX = map.maxX = buffers->mapX[0];
+        map.minZ = map.maxZ = buffers->mapZ[0];
         for (int k = 1; k < MAP_POINTS; ++k)
         {
-            if (map.x[k] < map.minX) map.minX = map.x[k];
-            if (map.x[k] > map.maxX) map.maxX = map.x[k];
-            if (map.z[k] < map.minZ) map.minZ = map.z[k];
-            if (map.z[k] > map.maxZ) map.maxZ = map.z[k];
+            if (buffers->mapX[k] < map.minX) map.minX = buffers->mapX[k];
+            if (buffers->mapX[k] > map.maxX) map.maxX = buffers->mapX[k];
+            if (buffers->mapZ[k] < map.minZ) map.minZ = buffers->mapZ[k];
+            if (buffers->mapZ[k] > map.maxZ) map.maxZ = buffers->mapZ[k];
         }
         map.state = MapState::Complete;
         mapRev++;
@@ -941,7 +960,7 @@ private:
         float best = 1e12f;
         for (int k = 0; k < MAP_POINTS; ++k)
         {
-            const float dx = map.x[k] - s.x, dz = map.z[k] - s.z;
+            const float dx = buffers->mapX[k] - s.x, dz = buffers->mapZ[k] - s.z;
             const float d = dx * dx + dz * dz;
             if (d < best) best = d;
         }
