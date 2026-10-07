@@ -89,7 +89,8 @@ $('send').onclick=function(){
  x.upload.onprogress=function(e){if(!e.lengthComputable)return;var p=Math.round(100*e.loaded/e.total);
   $('fill').style.width=p+'%';show(p<100?'Invio '+p+'%':'Verifica e installazione...')};
  x.onload=function(){$('file').disabled=false;
-  if(x.status==200){$('fill').style.width='100%';show(x.responseText+'. Tra una decina di secondi ricarica la pagina per vedere la versione nuova.','ok')}
+  if(x.status==200){$('fill').style.width='100%';$('fill').style.background='#36d36b';
+   show(x.responseText+'. Tra una decina di secondi ricarica la pagina per controllare la versione.','ok')}
   else{show(x.responseText||('Errore '+x.status),'err');$('send').disabled=false}};
  x.onerror=function(){$('file').disabled=false;$('send').disabled=false;
   show('Connessione interrotta: il firmware attuale non è cambiato, riprova','err')};
