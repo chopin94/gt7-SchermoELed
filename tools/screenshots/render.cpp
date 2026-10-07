@@ -258,6 +258,22 @@ static DashboardState brakingState(DashboardState st)
     return st;
 }
 
+// Full-screen progress of an update over Wi-Fi: start, then the given state.
+static void firmwareUpdate(OtaImage::Phase phase, uint32_t received, const char *message, const char *name)
+{
+    OtaImage::Progress progress;
+    progress.phase = OtaImage::Phase::Receiving;
+    progress.total = 2031616 - 47104;
+    dash.firmwareUpdateActive = false;
+    dash.firmwareUpdateProgress(progress);
+    progress.phase = phase;
+    progress.received = received;
+    snprintf(progress.message, sizeof(progress.message), "%s", message);
+    dash.firmwareUpdateProgress(progress);
+    savePng(name);
+    dash.firmwareUpdateActive = false;
+}
+
 static void waitingScreen(uint8_t background, bool ledFound, const char *name)
 {
     dash.waitingBackground = background;
@@ -418,6 +434,16 @@ int main(int argc, char **argv)
     dash.notificationsEnabled = true;
     dash.liveDeltaMode = true;
     settingsScreen(S::DeviceSettings, "menu-dispositivo");
+    settingsScreen(S::FirmwareUpdate, "menu-aggiornamento", [] {
+        dash.networkState("192.168.1.42", false, true, true);
+        dash.updatePageState(true);
+    });
+    settingsScreen(S::FirmwareUpdate, "menu-aggiornamento-simhub", [] {
+        dash.telemetry.mode = TelemetryMode::SimHub;
+        dash.networkState("Wi-Fi not used", false, false, true);
+        dash.updatePageState(false);
+    });
+    dash.telemetry.mode = TelemetryMode::GT7;
     settingsScreen(S::LedSettings, "menu-led", [] {
         dash.ledStripFound = true;
         dash.ledTheme = 1;
@@ -430,5 +456,12 @@ int main(int argc, char **argv)
     settingsScreen(S::ResetConfirmation, "menu-ripristino");
     settingsScreen(S::InitialTouch, "menu-calibrazione-touch");
     settingsScreen(S::TouchCalibration, "menu-calibrazione-verifica");
+
+    printf("Aggiornamento via Wi-Fi:\n");
+    firmwareUpdate(OtaImage::Phase::Receiving, 1236992, "", "aggiornamento-in-corso");
+    firmwareUpdate(OtaImage::Phase::Done, 1984512, "Aggiornato: riavvio con la versione nuova",
+                   "aggiornamento-completato");
+    firmwareUpdate(OtaImage::Phase::Failed, 1436, "Firmware per un'altra scheda: schermo-esp32-st7789",
+                   "aggiornamento-errore");
     return 0;
 }

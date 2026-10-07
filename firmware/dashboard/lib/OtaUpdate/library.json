@@ -1,0 +1,7 @@
+{
+  "name":"OtaUpdate",
+  "version":"1.0.0",
+  "description":"Aggiornamento firmware via Wi-Fi con i controlli sull'immagine ricevuta",
+  "frameworks":"arduino",
+  "platforms":"espressif32"
+}
