@@ -412,6 +412,7 @@ private:
         int32_t sectorMs[SECTORS] = {-1, -1, -1};
         SectorState sectorState[SECTORS] = {SectorState::None, SectorState::None, SectorState::None};
         float topKmh = 0;
+        uint32_t startClockMs = 0;  // sample clock at the line
     };
 
     struct MapData
@@ -514,6 +515,16 @@ private:
     static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
     int traceIndex(int age) const { return (traceHead - 1 - age + 2 * TRACE_SAMPLES) % TRACE_SAMPLES; }
 
+    // Lap time of the sample. Right after the line the game may still send
+    // the time of the lap just finished for a packet or two: ignore it.
+    int32_t lapTimeOf(const Sample &s) const
+    {
+        if (s.lapTimeMs < 0) return -1;
+        if (lap.observed && s.lapTimeMs > static_cast<int32_t>(s.timeMs - lap.startClockMs) + 1500)
+            return -1;
+        return s.lapTimeMs;
+    }
+
     void push(EventType type, int32_t lapMs, int32_t gainMs)
     {
         if (eventCount == EVENT_QUEUE) { eventHead = (eventHead + 1) % EVENT_QUEUE; eventCount--; }
@@ -558,8 +569,9 @@ private:
             if (dx * dx + dz * dz > JUMP_M * JUMP_M) broken = true;
         }
         // Lap time going backwards without a new lap: rewind or restart.
-        if (s.lapCount == previous.lapCount && s.lapTimeMs >= 0 && lap.lastTime >= 0 &&
-            s.lapTimeMs + 500 < lap.lastTime)
+        const int32_t lapTime = lapTimeOf(s);
+        if (s.lapCount == previous.lapCount && lapTime >= 0 && lap.lastTime >= 0 &&
+            lapTime + 500 < lap.lastTime)
             broken = true;
         if (broken) breakLap();
     }
@@ -593,11 +605,12 @@ private:
     {
         lap = LapState();
         lap.observed = fromLine;
+        lap.startClockMs = s.timeMs;
         // A race starts from the grid, behind the line: that lap is timed but
         // its distances are shifted, so it gives no map, reference or sectors.
         lap.standingStart = fromLine && s.speed < 5.0f && !isfinite(s.lapFraction);
         lap.continuous = true;
-        lap.lastTime = s.lapTimeMs;
+        lap.lastTime = lapTimeOf(s);
         lap.progressKnown = fromLine || isfinite(s.lapFraction);
         if (lap.progressKnown)
         {
@@ -606,7 +619,7 @@ private:
             if (fromLine)
             {
                 // The cells up to here belong to the line.
-                const uint32_t t = s.lapTimeMs >= 0 ? static_cast<uint32_t>(s.lapTimeMs) : 0;
+                const uint32_t t = lap.lastTime >= 0 ? static_cast<uint32_t>(lap.lastTime) : 0;
                 const int cells = static_cast<int>(floorf(lap.progress));
                 for (int c = 0; c <= cells && c < DELTA_CELLS; ++c) buffers->curTime[c] = t;
                 lap.maxCell = cells < DELTA_CELLS ? cells : DELTA_CELLS - 1;
@@ -815,10 +828,10 @@ private:
         }
 
         liveDeltaValid = false;
-        if (!lap.progressKnown || s.lapTimeMs < 0) { lap.lastTime = s.lapTimeMs; return; }
+        const int32_t t = lapTimeOf(s);
+        if (!lap.progressKnown || t < 0) { if (t >= 0) lap.lastTime = t; return; }
 
         const float p = progressCells(s);
-        const int32_t t = s.lapTimeMs;
         const float p0 = lap.lastProgress;
         const int32_t t0 = lap.lastTime;
 

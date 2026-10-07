@@ -442,6 +442,32 @@ static void testStandingStartAndCarChange()
     delete &a;
 }
 
+static void testStaleLapTimeAtLine()
+{
+    // At the line the game still sends the old lap time for two packets.
+    Analyzer &a = *newAnalyzer();
+    Driver d(a);
+    d.drive(LENGTH * 0.5f, [](float) { return 40.0f; });
+    d.drive(LENGTH * 0.5f + 1, [](float) { return 40.0f; }); // lap 1 starts
+    d.drive(LENGTH - 5, [](float) { return 40.0f; });
+    const int32_t finished = static_cast<int32_t>(llround((d.time - d.lapStart) * 1000.0)) + 125;
+    int stale = 0;
+    for (int i = 0; i < 120; ++i)
+    {
+        d.time += 1.0 / 60;
+        d.s += 40.0f / 60;
+        if (d.lapCount == 1 && d.s >= 2 * LENGTH) { d.lapCount = 2; d.lapStart = d.time; d.lastLapMs = finished; }
+        Sample s = d.sample(40);
+        if (d.lapCount == 2 && stale < 2) { s.lapTimeMs = finished; stale++; }
+        a.update(s);
+    }
+    d.driveLaps(1.0f, 41);
+    CHECK(a.lapsCompleted() == 2); // the second lap is not mistaken for a rewind
+    // Lap 2: the first 80 m at 40 m/s (the loop above), then 41 m/s.
+    CHECK_NEAR(a.referenceLapMs(), (80.0f / 40.0f + (LENGTH - 80.0f) / 41.0f) * 1000.0f, 25);
+    delete &a;
+}
+
 static void testFormat()
 {
     char buffer[16];
@@ -464,6 +490,7 @@ int main()
     testFractionMode();
     testLowFuel();
     testStandingStartAndCarChange();
+    testStaleLapTimeAtLine();
     testFormat();
     if (failures) { printf("%d check(s) failed\n", failures); return 1; }
     printf("lap analysis: all tests passed\n");
