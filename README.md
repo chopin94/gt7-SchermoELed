@@ -352,7 +352,7 @@ pio device monitor
 ```
 
 > [!IMPORTANT]
-> **Lo schermo si aggiorna solo via USB.** L'aggiornamento via Wi-Fi è stato tolto: il firmware occupava già il 91% di uno slot da 1,94 MB (1.851.737 byte su 2.031.616) e con due slot non restava spazio per i circuiti salvati. La nuova tabella delle partizioni ([`partitions.csv`](firmware/dashboard/partitions.csv)) ha un solo firmware da 3 MB e 896 KB di filesystem. **Il primo caricamento con questa versione va fatto via USB**, come tutti i successivi; Wi-Fi salvato, calibrazione del touch e impostazioni restano perché `nvs` e `otadata` non cambiano posto. La striscia LED continua ad aggiornarsi via Wi-Fi.
+> **Lo schermo si aggiorna solo via USB.** L'aggiornamento via Wi-Fi è stato tolto: il firmware occupava già il 91% di uno slot da 1,94 MB (1.851.737 byte su 2.031.616) e con due slot non restava spazio per i circuiti salvati. La nuova tabella delle partizioni ([`partitions.csv`](firmware/dashboard/partitions.csv)) ha un solo firmware da 3 MB (oggi ne occupa 1,90, il 60%) e 896 KB di filesystem. **Il primo caricamento con questa versione va fatto via USB**, come tutti i successivi; Wi-Fi salvato, calibrazione del touch e impostazioni restano perché `nvs` e `otadata` non cambiano posto. La striscia LED continua ad aggiornarsi via Wi-Fi.
 
 La porta COM viene trovata in automatico. Se non la trova, togli il `;` davanti a `upload_port` in `platformio.ini` e scrivi la tua porta (per esempio `COM9` per lo schermo, `COM8` per i LED).
 
