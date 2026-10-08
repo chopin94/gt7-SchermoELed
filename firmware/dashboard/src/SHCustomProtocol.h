@@ -2,6 +2,7 @@
 #include "SimHubProtocol.h"
 #include "ACUdpTelemetry.h"
 #include "LapAnalysis.h"
+#include "GripAnalysis.h"
 #include "DashboardWiFiCredentials.h"
 #include <OtaImage.h>
 #include <qrcode.h>
@@ -153,6 +154,7 @@ enum class DashboardTheme : uint8_t
 	TrackMap = 12,
 	Telemetry = 13,
 	Performance = 14,
+	Grip = 15,
 };
 
 struct DashboardThemeDescriptor
@@ -177,6 +179,7 @@ static constexpr DashboardThemeDescriptor DASHBOARD_THEMES[] = {
 	{DashboardTheme::TrackMap, "MAPPA PISTA"},
 	{DashboardTheme::Telemetry, "TELEMETRIA"},
 	{DashboardTheme::Performance, "PRESTAZIONI"},
+	{DashboardTheme::Grip, "ADERENZA"},
 };
 static constexpr size_t DASHBOARD_THEME_COUNT =
 	sizeof(DASHBOARD_THEMES) / sizeof(DASHBOARD_THEMES[0]);
@@ -317,6 +320,8 @@ private:
 	// Lap analysis of the direct sources (GT7 and Assetto Corsa): live delta,
 	// sectors, track map, G-forces, acceleration runs and session summary.
 	LapAnalysis::Analyzer lapAnalysis;
+	// Wheel slip, lock-ups, tyre temperatures and suspension load (GT7 only).
+	GripAnalysis::Analyzer gripAnalysis;
 	TelemetrySource analysisSource = TelemetrySource::None;
 	int32_t lastGT7CarCode = 0;
 	bool notificationsEnabled = true;
@@ -1207,7 +1212,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Lap analysis: live delta, sectors, track map, G-forces, runs.
 		// Another car on the same circuit: the times start over, the map stays.
 		if (data.carCode != 0 && lastGT7CarCode != 0 && data.carCode != lastGT7CarCode)
+		{
 			lapAnalysis.resetTiming();
+			gripAnalysis.resetCar();
+		}
 		if (data.carCode != 0) lastGT7CarCode = data.carCode;
 		LapAnalysis::Sample sample;
 		// GT7 sends one packet per frame at 60 Hz: the packet id is the clock.
@@ -1231,6 +1239,26 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		sample.fuelFraction = validIceFuel ? data.fuelLevel / data.fuelCapacity : NAN;
 		sample.fuelLaps = !state.fuelIsEV && estimatedFuelLaps >= 0.0f ? estimatedFuelLaps : NAN;
 		lapAnalysis.update(sample);
+
+		GripAnalysis::Sample grip;
+		grip.timeMs = sample.timeMs;
+		grip.speed = sample.speed;
+		grip.driving = sample.driving;
+		grip.hasWheels = true;
+		for (int i = 0; i < GripAnalysis::WHEELS; ++i)
+		{
+			grip.wheelRps[i] = data.wheelRPS[i];
+			grip.tyreRadius[i] = data.tyreRadius[i];
+			grip.tyreTemp[i] = data.tyreTemp[i];
+			grip.suspension[i] = data.suspHeight[i];
+		}
+		grip.throttle = sample.throttle;
+		grip.brake = sample.brake;
+		grip.lateralG = lapAnalysis.lateralG();
+		grip.longitudinalG = lapAnalysis.longitudinalG();
+		grip.lapCount = data.lapCount;
+		gripAnalysis.update(grip);
+
 		if (liveDeltaMode) state.sessionBestLiveDeltaSeconds = liveDeltaText();
 		takeAnalysisEvents(state);
 
@@ -1601,7 +1629,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         // Another game: the lap analysis starts over. A pause in the data of
         // the same game (menus, PS5 standby) keeps the map and the session.
         if (selected != TelemetrySource::None && selected != analysisSource) {
-            if (analysisSource != TelemetrySource::None) lapAnalysis.reset();
+            if (analysisSource != TelemetrySource::None) { lapAnalysis.reset(); gripAnalysis.reset(); }
             analysisSource = selected;
         }
         if (before != selected) {
@@ -1720,6 +1748,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			// The telemetry graphs use about 36 KB of sprites: free them for
 			// the other themes.
 			if (activeDashboardTheme != DashboardTheme::Telemetry) releaseTelemetrySprites();
+			if (activeDashboardTheme != DashboardTheme::Grip) releaseGripSprites();
 			invalidateDashboardRenderer();
 		}
 
@@ -1791,6 +1820,9 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		case DashboardTheme::Performance:
 			drawPerformanceDashboard(state, forceUpdate);
 			break;
+		case DashboardTheme::Grip:
+			drawGripDashboard(state, forceUpdate);
+			break;
 		case DashboardTheme::GT3:
 		default:
 #if GT7_DASHBOARD_LEGACY_UI
@@ -1855,6 +1887,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 #include "dashboard/themes/TrackMapTheme.inc"
 #include "dashboard/themes/TelemetryTheme.inc"
 #include "dashboard/themes/PerformanceTheme.inc"
+#include "dashboard/themes/GripTheme.inc"
 
 	void drawThemePlaceholder(
 		const DashboardState &state,
@@ -2851,6 +2884,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 			else if (button == 4)
 			{
 				lapAnalysis.reset();
+				gripAnalysis.reset();
 				notificationCount = 0;
 				featuresStatus = "Mappa, tempi e prove azzerati";
 			}
