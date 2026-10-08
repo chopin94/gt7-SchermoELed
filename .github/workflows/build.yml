@@ -66,7 +66,14 @@ jobs:
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/telemetry.cpp -o /tmp/telemetry-tests && /tmp/telemetry-tests
       # Delta live, settori, mappa, forze G e cronometro (src/LapAnalysis.h)
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/lap_analysis.cpp -o /tmp/lap-tests && /tmp/lap-tests
-      # Aggiornamento via Wi-Fi (lib/OtaUpdate): controlli sul file e pagina /update
+      # Punti di frenata e blocchi salvabili del circuito (src/LapAnalysis.h)
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/brake_points.cpp -o /tmp/brake-tests && /tmp/brake-tests
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/track_blobs.cpp -o /tmp/blob-tests && /tmp/blob-tests
+      # Salvataggio dei circuiti su file (src/TrackStore.h)
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/track_store.cpp -o /tmp/store-tests && /tmp/store-tests
+      # Slittamento, bloccaggi, carico delle sospensioni (src/GripAnalysis.h)
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/grip_analysis.cpp -o /tmp/grip-tests && /tmp/grip-tests
+      # Aggiornamento via Wi-Fi della striscia LED (lib/OtaUpdate): controlli sul file e pagina /update
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/ota_image.cpp -o /tmp/ota-image-tests && /tmp/ota-image-tests
       - run: g++ -std=gnu++11 -Wall -Wextra -fsanitize=address,undefined -I firmware/dashboard/tests/ota_stubs -I tools/screenshots/stubs -I firmware/dashboard/lib/OtaUpdate firmware/dashboard/tests/ota_web_update.cpp -o /tmp/ota-web-tests && /tmp/ota-web-tests
       # Compila il simulatore dello schermo: verifica che temi e menu disegnino senza errori

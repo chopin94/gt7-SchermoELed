@@ -538,6 +538,9 @@ public:
     // NAN where the pedal was not used (yet).
     float brakeDelta(int i) const { return buffers && i >= 0 && i < refZoneCount ? buffers->curDelta[i] : NAN; }
     float lastLapBrakeDelta(int i) const { return buffers && i >= 0 && i < refZoneCount ? buffers->lastDelta[i] : NAN; }
+    // Changes only when the reference braking points change (not with every
+    // braking): the map redraws its markers when it does.
+    uint32_t referenceBrakeRevision() const { return refZoneRev; }
     uint32_t brakeRevision() const { return brakeRev; }
 
     // ---- Persistence ---------------------------------------------------------------
@@ -709,6 +712,7 @@ public:
         nextRefValid = false;
         saveReferencePending = false;
         brakeRev++;
+        refZoneRev++;
         sectorRev++;
         return true;
     }
@@ -858,7 +862,7 @@ private:
     int resultIndex = -1;         // reference zone the last braking was matched with
     float resultDelta = NAN;      // metres: + braked earlier than the reference
     float resultEntryKmh = NAN, resultReferenceKmh = NAN;
-    uint32_t brakeRev = 0;
+    uint32_t brakeRev = 0, refZoneRev = 0;
 
     // Persistence.
     uint32_t trackKeyValue = 0;
@@ -1582,7 +1586,7 @@ private:
         resultDelta = resultEntryKmh = resultReferenceKmh = NAN;
         if (buffers)
             for (int i = 0; i < MAX_BRAKE_ZONES; ++i) buffers->curDelta[i] = buffers->lastDelta[i] = NAN;
-        if (includeReference) refZoneCount = 0;
+        if (includeReference) { refZoneCount = 0; refZoneRev++; }
         brakeRev++;
     }
 
@@ -1618,6 +1622,7 @@ private:
         // The results of this lap were against the old reference.
         for (int i = 0; i < MAX_BRAKE_ZONES; ++i) buffers->curDelta[i] = NAN;
         brakeRev++;
+        refZoneRev++;
     }
 
     // Reference braking point of the same corner: close ahead or behind, same

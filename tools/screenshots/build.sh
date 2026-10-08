@@ -15,7 +15,7 @@ mkdir -p "$CACHE" "$BUILD" "$OUT"
 [ -d "$CACHE/QRCode" ] || git clone -q --depth 1 https://github.com/ricmoo/QRCode "$CACHE/QRCode"
 
 LGFX="$CACHE/LovyanGFX/src"
-INCLUDES=(-I"$HERE/stubs" -I"$FW/src" -I"$FW/include" -I"$FW/lib/GT7Udp/src" -I"$FW/lib/GT7DerivedMetrics" -I"$FW/lib/OtaUpdate" -I"$LGFX" -I"$CACHE/QRCode/src")
+INCLUDES=(-I"$HERE/stubs" -I"$FW/src" -I"$FW/lib/GT7Udp/src" -I"$FW/lib/GT7DerivedMetrics" -I"$LGFX" -I"$CACHE/QRCode/src")
 FLAGS=(-O1 -w -DGT7_SCREENSHOT_HOST=1 -DLGFX_USE_V1 -DLGFX_LINUX_FB -DBOARD_ESP32_2432S024C=1)
 
 # LovyanGFX: solo il codice comune e la piattaforma Linux (nessun pannello reale)
