@@ -4,10 +4,10 @@ from pathlib import Path
 from PIL import Image
 
 SHOTS = Path(__file__).resolve().parents[2] / "docs" / "schermate"
-THEMES = ["formula", "mappa-pista", "telemetria", "prestazioni",
+THEMES = ["formula", "mappa-pista", "telemetria", "prestazioni", "aderenza", "frenata",
           "classic", "gt3", "retro", "radar", "mono", "pocket", "endurance",
           "ferrari", "ferrari-ac", "ferrari-gold", "bmw-m"]
-W, H, GAP, COLS, ROWS = 320, 240, 12, 4, 4
+W, H, GAP, COLS, ROWS = 320, 240, 12, 6, 3
 
 sheet = Image.new("RGB", (COLS * W + (COLS + 1) * GAP, ROWS * H + (ROWS + 1) * GAP), (13, 15, 20))
 tiles = [f"theme-{name}.png" for name in THEMES] + ["waiting-riepilogo.png"]

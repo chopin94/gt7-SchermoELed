@@ -15,13 +15,14 @@ const outDir = process.argv[2] ?? path.join(root, 'docs/schermate');
 const src = readFileSync(path.join(root, 'firmware/dashboard/lib/OtaUpdate/OtaWebUpdate.h'), 'utf8');
 let html = src.match(/R"html\(([\s\S]*?)\)html"/)[1];
 
-// Stessi segnaposto sostituiti da sendPage() sullo schermo ESP32-2432S024C
-const slot = 0x1F0000;
-const values = { DEVICE: 'GT7 Schermo', VERSION: '2.1.0', BOARD: 'schermo-esp32-2432s024c', CHIP: '0', MAX: String(slot) };
+// Stessi segnaposto sostituiti da sendPage() sulla striscia LED (ESP32-S2 mini: chip 2,
+// slot di aggiornamento da 1,25 MB della tabella predefinita)
+const slot = 0x140000;
+const values = { DEVICE: 'GT7 LED', VERSION: '1.1.0', BOARD: 'led-lolin-s2-mini', CHIP: '2', MAX: String(slot) };
 html = html.replace(/%([A-Z]+)%/g, (all, k) => values[k] ?? all);
 
 // Un firmware finto con intestazione ESP-IDF e nome della scheda.
-function firmware({ size = 1900000, chip = 0, app = true, tag = 'GT7-FW:schermo-esp32-2432s024c' } = {}) {
+function firmware({ size = 1200000, chip = 2, app = true, tag = 'GT7-FW:led-lolin-s2-mini' } = {}) {
   const data = Buffer.alloc(size, 0x5a);
   data[0] = 0xe9;
   data.writeUInt16LE(chip, 12);
@@ -33,14 +34,14 @@ function firmware({ size = 1900000, chip = 0, app = true, tag = 'GT7-FW:schermo-
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 420, height: 640 }, deviceScaleFactor: 2 });
 let posted = 0;
-await page.route('http://gt7-schermo.local/update', async (route) => {
+await page.route('http://gt7-led.local/update', async (route) => {
   if (route.request().method() === 'POST') {
     posted = route.request().postDataBuffer().length;
     return route.fulfill({ contentType: 'text/plain', body: 'Aggiornato: riavvio con la versione nuova' });
   }
   return route.fulfill({ contentType: 'text/html', body: html });
 });
-await page.goto('http://gt7-schermo.local/update');
+await page.goto('http://gt7-led.local/update');
 
 const msg = () => page.textContent('#msg');
 async function choose(name, buffer) {
@@ -51,8 +52,8 @@ async function choose(name, buffer) {
 
 // File rifiutati nel browser: il pulsante resta disattivato.
 const refused = [
-  ['firmware.bin', firmware({ tag: 'GT7-FW:schermo-esp32-st7789' }), "Firmware per un'altra scheda: schermo-esp32-st7789"],
-  ['firmware.bin', firmware({ chip: 2, tag: 'GT7-FW:led-lolin-s2-mini' }), 'altro chip'],
+  ['firmware.bin', firmware({ tag: 'GT7-FW:led-wemos-d1' }), "Firmware per un'altra scheda: led-wemos-d1"],
+  ['firmware.bin', firmware({ chip: 0, tag: 'GT7-FW:schermo-esp32-2432s024c' }), 'altro chip'],
   ['bootloader.bin', firmware({ app: false }), 'non bootloader.bin'],
   ['firmware.bin', firmware({ tag: '' }), 'senza aggiornamento Wi-Fi'],
   ['firmware.bin', firmware({ size: slot + 4096 }), 'troppo grande'],

@@ -109,6 +109,8 @@ struct SimDriver
     bool lapStarted = false;
     float speed = 0, accel = 0;
     float fuel = 0.62f;
+    int lockWheel = -1;  // wheel locked under hard braking (screenshots of the grip theme)
+    int spinWheel = -1;  // wheel spinning under power
 
     LapAnalysis::Sample sample() const
     {
@@ -152,7 +154,50 @@ struct SimDriver
             lapCount++;
         }
         g_hostMillis += 17;
-        dash.lapAnalysis.update(sample());
+        const LapAnalysis::Sample current = sample();
+        dash.lapAnalysis.update(current);
+        feedGrip(current);
+    }
+
+    // The wheel data GT7 would send: wheel speeds follow the ground speed with
+    // a little difference between the inner and the outer wheels, a lock-up
+    // or wheelspin where the scenario asks for one, suspension heights that
+    // follow the weight transfer.
+    void feedGrip(const LapAnalysis::Sample &now)
+    {
+        const float radius = 0.33f;
+        const float lat = dash.lapAnalysis.lateralG(), lon = dash.lapAnalysis.longitudinalG();
+        GripAnalysis::Sample g;
+        g.timeMs = now.timeMs;
+        g.speed = now.speed;
+        g.hasWheels = true;
+        g.throttle = now.throttle;
+        g.brake = now.brake;
+        g.lateralG = lat;
+        g.longitudinalG = lon;
+        g.lapCount = now.lapCount;
+        const float cornering = fminf(0.03f, fabsf(lat) * 0.012f);
+        // Outer wheels (the left ones in a right turn) run faster.
+        const float side[4] = {1.0f, -1.0f, 1.0f, -1.0f};
+        for (int i = 0; i < 4; ++i)
+        {
+            float ratio = 1.0f + side[i] * (lat > 0 ? 1.0f : -1.0f) * cornering;
+            if (i == lockWheel && now.brake > 0.7f && now.speed > 15.0f) ratio = 0.78f;
+            if (i == spinWheel && now.throttle > 0.5f) ratio = 1.18f;
+            g.wheelRps[i] = ratio * now.speed / radius;
+            g.tyreRadius[i] = radius;
+        }
+        const float baseTemp[4] = {88, 93, 81, 84};
+        const float rest = 0.12f;
+        const float pitch = fmaxf(-1.5f, fminf(1.5f, -lon)); // + under braking
+        const float roll = fmaxf(-1.5f, fminf(1.5f, lat));   // + in a right turn
+        for (int i = 0; i < 4; ++i)
+        {
+            const bool front = i < 2, left = i % 2 == 0;
+            g.tyreTemp[i] = baseTemp[i] + 4.0f * fabsf(lat) * (left == (lat > 0) ? 1.0f : 0.3f);
+            g.suspension[i] = rest - (front ? 0.012f : -0.008f) * pitch - (left ? 0.010f : -0.010f) * roll;
+        }
+        dash.gripAnalysis.update(g);
     }
 
     // Laps the circuit with a pace for each third of the lap until `until`
@@ -258,22 +303,6 @@ static DashboardState brakingState(DashboardState st)
     return st;
 }
 
-// Full-screen progress of an update over Wi-Fi: start, then the given state.
-static void firmwareUpdate(OtaImage::Phase phase, uint32_t received, const char *message, const char *name)
-{
-    OtaImage::Progress progress;
-    progress.phase = OtaImage::Phase::Receiving;
-    progress.total = 2031616 - 47104;
-    dash.firmwareUpdateActive = false;
-    dash.firmwareUpdateProgress(progress);
-    progress.phase = phase;
-    progress.received = received;
-    snprintf(progress.message, sizeof(progress.message), "%s", message);
-    dash.firmwareUpdateProgress(progress);
-    savePng(name);
-    dash.firmwareUpdateActive = false;
-}
-
 static void waitingScreen(uint8_t background, bool ledFound, const char *name)
 {
     dash.waitingBackground = background;
@@ -336,13 +365,17 @@ int main(int argc, char **argv)
         savePng(base + "-limitatore");
     }
 
-    // Lap 5, a little slower: hard braking while behind on the best lap.
+    // Lap 5, a little slower: hard braking while behind on the best lap, with
+    // the front left wheel locking (for the grip theme).
     driver.drive(attack, [] { return driver.lapCount == 5; });
     const float slower[3] = {0.985f, 0.982f, 0.99f};
+    driver.lockWheel = 0;
     driver.drive(slower, [] {
         return lapFraction() > 0.15f && driver.accel < -9.0f && dash.lapAnalysis.hasLiveDelta() &&
                dash.lapAnalysis.liveDeltaMs() > 150;
     });
+    int settle = 0;
+    driver.drive(slower, [&settle] { return ++settle > 14; }); // a few more packets: the lock-up is confirmed
     const DashboardState braking = brakingState(simState());
     printf("In frenata, giro %d al %.0f%%: %s km/h, delta %s\n", driver.lapCount, lapFraction() * 100,
            braking.speed.c_str(), braking.sessionBestLiveDeltaSeconds.c_str());
@@ -352,6 +385,26 @@ int main(int argc, char **argv)
         renderTheme(theme.id, braking);
         savePng("theme-" + slug(theme.name) + "-frenata");
     }
+
+    // Corner exit with the rear right wheel spinning (grip theme).
+    driver.lockWheel = -1;
+    driver.spinWheel = 3;
+    driver.drive(attack, [] {
+        return lapFraction() > 0.2f && driver.accel > 3.0f && fabsf(dash.lapAnalysis.lateralG()) > 0.5f;
+    });
+    settle = 0;
+    driver.drive(attack, [&settle] { return ++settle > 14; });
+    renderTheme(DashboardTheme::Grip, simState());
+    savePng("theme-aderenza-pattinamento");
+    driver.spinWheel = -1;
+
+    // On the way to a braking point of the best lap (coaching theme).
+    driver.drive(attack, [] {
+        float meters, kmh;
+        return dash.lapAnalysis.nextBrakePoint(meters, kmh) && meters < 95.0f;
+    });
+    renderTheme(DashboardTheme::Brake, simState());
+    savePng("theme-frenata-avvicinamento");
 
     // Acceleration run: stop, wait for the green light, full throttle to 250.
     printf("Prestazioni:\n");
@@ -434,16 +487,6 @@ int main(int argc, char **argv)
     dash.notificationsEnabled = true;
     dash.liveDeltaMode = true;
     settingsScreen(S::DeviceSettings, "menu-dispositivo");
-    settingsScreen(S::FirmwareUpdate, "menu-aggiornamento", [] {
-        dash.networkState("192.168.1.42", false, true, true);
-        dash.updatePageState(true);
-    });
-    settingsScreen(S::FirmwareUpdate, "menu-aggiornamento-simhub", [] {
-        dash.telemetry.mode = TelemetryMode::SimHub;
-        dash.networkState("Wi-Fi not used", false, false, true);
-        dash.updatePageState(false);
-    });
-    dash.telemetry.mode = TelemetryMode::GT7;
     settingsScreen(S::LedSettings, "menu-led", [] {
         dash.ledStripFound = true;
         dash.ledTheme = 1;
@@ -457,11 +500,5 @@ int main(int argc, char **argv)
     settingsScreen(S::InitialTouch, "menu-calibrazione-touch");
     settingsScreen(S::TouchCalibration, "menu-calibrazione-verifica");
 
-    printf("Aggiornamento via Wi-Fi:\n");
-    firmwareUpdate(OtaImage::Phase::Receiving, 1236992, "", "aggiornamento-in-corso");
-    firmwareUpdate(OtaImage::Phase::Done, 1984512, "Aggiornato: riavvio con la versione nuova",
-                   "aggiornamento-completato");
-    firmwareUpdate(OtaImage::Phase::Failed, 1436, "Firmware per un'altra scheda: schermo-esp32-st7789",
-                   "aggiornamento-errore");
     return 0;
 }

@@ -35,6 +35,10 @@ The included themes are:
 | `TrackMap` | 12 | `drawTrackMapDashboard()` | Track map recorded during the first lap, car position, coloured sectors |
 | `Telemetry` | 13 | `drawTelemetryDashboard()` | G-force circle with trail, throttle and brake traces |
 | `Performance` | 14 | `drawPerformanceDashboard()` | Acceleration timer (0-100, 0-200, 100-200, 400 m) with drag-race tree |
+| `Grip` | 15 | `drawGripDashboard()` | Four wheels: tyre temperature, slip bar (lock-ups and wheelspin), suspension load, lap counters. GT7 only |
+| `Brake` | 16 | `drawBrakeDashboard()` | Countdown to the next braking point of the best lap, result of the last braking, one chip per point |
+
+Themes 15 and 16 read the grip analysis (`src/GripAnalysis.h`, member `gripAnalysis`, fed from the GT7 wheel data) and the braking points of the lap analysis. In the theme selector they draw a fixed example instead of live data (`fillGripView`, `fillBrakeView`).
 
 Themes 11-14 read the lap analysis (`src/LapAnalysis.h`, member `lapAnalysis`):
 live delta, sectors, map, G-forces, pedal traces, acceleration runs and session

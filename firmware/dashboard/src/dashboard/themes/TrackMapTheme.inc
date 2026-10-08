@@ -25,6 +25,7 @@
 	LapAnalysis::MapState trackMapDrawnState = LapAnalysis::MapState::Waiting;
 	int trackMapCarX = -1000, trackMapCarY = -1000;
 	String trackMapSectorCache;
+	String trackMapMarkCache;
 
 	void setTrackMapView(float minX, float minZ, float maxX, float maxZ)
 	{
@@ -45,6 +46,22 @@
 	{
 		sx = static_cast<int>(lroundf(x * trackMapView.scale + trackMapView.offsetX));
 		sy = static_cast<int>(lroundf(z * trackMapView.scale + trackMapView.offsetZ));
+	}
+
+	// Braking points of the reference lap, as small orange squares on the track.
+	void drawTrackMapBrakeMarks(int bx, int by, int bw, int bh)
+	{
+		const int zones = lapAnalysis.referenceBrakeZoneCount();
+		for (int i = 0; i < zones; ++i)
+		{
+			LapAnalysis::BrakeZone zone;
+			if (!lapAnalysis.referenceBrakeZone(i, zone)) continue;
+			int sx, sy;
+			trackMapToScreen(zone.x, zone.z, sx, sy);
+			if (sx < bx - 4 || sx > bx + bw + 4 || sy < by - 4 || sy > by + bh + 4) continue;
+			tft.fillRect(sx - 3, sy - 3, 7, 7, TFT_BLACK);
+			tft.fillRect(sx - 2, sy - 2, 5, 5, tft.color565(255, 120, 0));
+		}
 	}
 
 	void drawThickLine(int x0, int y0, int x1, int y1, uint16_t color)
@@ -102,6 +119,7 @@
 					tft.drawLine(sx - nx + o, sy - ny, sx + nx + o, sy + ny, TFT_WHITE);
 			}
 		}
+		if (closed) drawTrackMapBrakeMarks(bx, by, bw, bh);
 	}
 
 	void drawTrackMapMessage(const char *title, const String &line1, const String &line2)
@@ -156,7 +174,10 @@
 		else if (redraw)
 			setTrackMapView(minX, minZ, maxX, maxZ);
 
-		if (state == LapAnalysis::MapState::Complete && sectors != trackMapSectorCache) redraw = true;
+		// New colours of the sectors or new braking points of the reference lap.
+		const String marks = String(lapAnalysis.referenceBrakeRevision());
+		if (state == LapAnalysis::MapState::Complete && (sectors != trackMapSectorCache || marks != trackMapMarkCache))
+			redraw = true;
 
 		if (redraw)
 		{
@@ -165,6 +186,7 @@
 			trackMapDrawnPoints = count;
 			trackMapCarX = trackMapCarY = -1000;
 			trackMapSectorCache = sectors;
+			trackMapMarkCache = marks;
 			trackMapDrawnState = state;
 		}
 		else if (state == LapAnalysis::MapState::Recording && count > trackMapDrawnPoints)

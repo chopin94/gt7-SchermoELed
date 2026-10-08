@@ -1,7 +1,9 @@
 #pragma once
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <new>
 
@@ -34,6 +36,20 @@ static constexpr uint32_t G_TRAIL_STEP_MS = 80;
 static constexpr int TRACE_SAMPLES = 144;       // 144 x 50 ms: 7.2 s of pedals
 static constexpr uint32_t TRACE_STEP_MS = 50;
 static constexpr float GRAVITY = 9.80665f;
+
+// Braking points: where the pedal goes down for each corner of the lap. They
+// are compared with the ones of the reference (best) lap.
+static constexpr int MAX_BRAKE_ZONES = 24;
+static constexpr float BRAKE_ON = 0.25f;          // pedal that starts a zone
+static constexpr float BRAKE_OFF = 0.10f;         // pedal that keeps it going
+static constexpr float BRAKE_MIN_SPEED = 20.0f;   // m/s: slower is not a braking zone
+static constexpr float BRAKE_MIN_DROP = 1.7f;     // m/s lost within the confirmation time
+static constexpr uint32_t BRAKE_CONFIRM_MS = 350;
+static constexpr uint32_t BRAKE_RELEASE_MS = 400;
+static constexpr uint32_t BRAKE_GAP_MS = 1500;    // a new zone needs this long since the last
+static constexpr float BRAKE_MATCH_ALONG_M = 150.0f;
+static constexpr float BRAKE_MATCH_SIDE_M = 45.0f;
+static constexpr float BRAKE_LOOKAHEAD_M = 500.0f;
 
 // One telemetry update. Fields a game does not report keep their defaults.
 struct Sample
@@ -94,6 +110,22 @@ struct LapRecord
     float topSpeedKmh = 0;
 };
 
+// Where the braking for a corner started.
+struct BrakeZone
+{
+    float x = 0, z = 0;     // position of the car in metres
+    float hx = 0, hz = 0;   // direction of travel (unit vector)
+    float entryKmh = 0;     // speed when the pedal went down
+    float peak = 0;         // strongest pedal, 0-1
+};
+
+// How a persisted block is used: see exportTrack and exportReference.
+enum class SaveKind : uint8_t
+{
+    Track,     // circuit map
+    Reference, // best lap of the car on the circuit: times, sectors, braking points
+};
+
 // Drag-race "Christmas tree" shown by the performance theme.
 enum class TreeLight : uint8_t
 {
@@ -125,6 +157,75 @@ struct LaunchRun
     float v400Kmh = NAN;  // speed at 400 m
     float vmaxKmh = NAN;
 };
+
+// ---- Persisted blocks ----------------------------------------------------------
+// The circuit map and the reference lap are saved as two small binary blocks
+// (see Analyzer::exportTrack and exportReference). Little endian, a CRC-32 at
+// the end: a block cut short by a power loss is rejected, never half loaded.
+static constexpr uint32_t TRACK_MAGIC = 0x4D544447;     // "GDTM"
+static constexpr uint32_t REFERENCE_MAGIC = 0x52544447; // "GDTR"
+static constexpr uint8_t BLOB_VERSION = 1;
+static constexpr size_t TRACK_BLOB_SIZE = 4 + 1 + 1 + 2 + 2 + 4 + 4 * 4 + MAP_POINTS * 8 + 4;
+static constexpr size_t REFERENCE_BLOB_HEADER = 4 + 1 + 1 + 2 + 4 + 4 + 3 * 4 + 4;
+static constexpr size_t BRAKE_ZONE_BLOB_SIZE = 6 * 4;
+static constexpr size_t REFERENCE_BLOB_MAX =
+    REFERENCE_BLOB_HEADER + MAX_BRAKE_ZONES * BRAKE_ZONE_BLOB_SIZE + DELTA_CELLS * 4 + 4;
+// The circuit is recognised when the car is this close to the saved map...
+static constexpr float TRACK_MATCH_M = 30.0f;
+
+inline uint32_t crc32(const uint8_t *data, size_t length)
+{
+    uint32_t crc = 0xFFFFFFFFu;
+    for (size_t i = 0; i < length; ++i)
+    {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; ++bit) crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1u)));
+    }
+    return ~crc;
+}
+
+namespace blob
+{
+struct Writer
+{
+    uint8_t *out;
+    size_t pos = 0;
+    explicit Writer(uint8_t *buffer) : out(buffer) {}
+    void put(const void *data, size_t n) { memcpy(out + pos, data, n); pos += n; }
+    void u8(uint8_t v) { put(&v, 1); }
+    void u16(uint16_t v) { put(&v, 2); }
+    void u32(uint32_t v) { put(&v, 4); }
+    void i32(int32_t v) { put(&v, 4); }
+    void f32(float v) { put(&v, 4); }
+};
+struct Reader
+{
+    const uint8_t *in;
+    size_t length, pos = 0;
+    bool ok = true;
+    Reader(const uint8_t *buffer, size_t size) : in(buffer), length(size) {}
+    void get(void *data, size_t n)
+    {
+        if (pos + n > length) { ok = false; memset(data, 0, n); return; }
+        memcpy(data, in + pos, n);
+        pos += n;
+    }
+    uint8_t u8() { uint8_t v; get(&v, 1); return v; }
+    uint16_t u16() { uint16_t v; get(&v, 2); return v; }
+    uint32_t u32() { uint32_t v; get(&v, 4); return v; }
+    int32_t i32() { int32_t v; get(&v, 4); return v; }
+    float f32() { float v; get(&v, 4); return v; }
+};
+// Magic, version and CRC of a block: the data are trusted only after this.
+inline bool valid(const uint8_t *data, size_t length, uint32_t magic)
+{
+    if (!data || length < 12) return false;
+    uint32_t stored, found;
+    memcpy(&stored, data + length - 4, 4);
+    memcpy(&found, data, 4);
+    return found == magic && data[4] == BLOB_VERSION && crc32(data, length - 4) == stored;
+}
+} // namespace blob
 
 class Analyzer
 {
@@ -158,6 +259,7 @@ public:
         fuelArmed = true;
         fuelLowest = NAN;
         eventHead = eventCount = 0;
+        saveTrackPending = saveReferencePending = false;
     }
 
     // Another car on the same circuit: times, references and runs start over,
@@ -187,6 +289,8 @@ public:
         bestRun = LaunchRun();
         rollingActive = false;
         launchRev++;
+        clearBrakeZones(true);
+        saveReferencePending = false;
     }
 
     // Forgets what belongs to the circuit: map, references, sectors and laps.
@@ -219,6 +323,9 @@ public:
         liveDeltaValid = false;
         liveDelta = 0;
         sectorRev++;
+        clearBrakeZones(true);
+        trackKeyValue = 0;
+        saveTrackPending = saveReferencePending = false;
     }
 
     void update(const Sample &s)
@@ -230,6 +337,7 @@ public:
             // Paused or in the menus: nothing moves. The next driving sample
             // restarts the derivatives instead of seeing a long time step.
             motionGap = true;
+            braking.active = false;
             return;
         }
 
@@ -243,6 +351,7 @@ public:
         updateMap(s);
         checkTrackChange(s);
         updateMotion(s, dtMs);
+        updateBrakeZones(s);
         updateLaunch(s, dtMs);
         updateFuel(s);
 
@@ -386,6 +495,228 @@ public:
         return true;
     }
 
+    // ---- Braking points -----------------------------------------------------------
+    // Braking points of this lap, in the order they were taken.
+    int brakeZoneCount() const { return curZoneCount; }
+    // Braking points of the reference (best) lap.
+    int referenceBrakeZoneCount() const { return buffers ? refZoneCount : 0; }
+    bool referenceBrakeZone(int i, BrakeZone &zone) const
+    {
+        if (!buffers || i < 0 || i >= refZoneCount) return false;
+        zone = buffers->refZones[i];
+        return true;
+    }
+    // Metres to the next braking point of the reference lap and the speed it
+    // was taken at; false when there is none within BRAKE_LOOKAHEAD_M ahead.
+    bool nextBrakePoint(float &meters, float &referenceKmh) const
+    {
+        if (!buffers || !hasPrevious || !previous.hasPosition || !hasHeading) return false;
+        if (!nextRefValid || nextRef >= refZoneCount) return false;
+        const BrakeZone &z = buffers->refZones[nextRef];
+        const float dx = z.x - previous.x, dz = z.z - previous.z;
+        const float ahead = dx * cosf(heading) + dz * sinf(heading);
+        const float distance = hypotf(dx, dz);
+        if (ahead <= 0.0f || distance > BRAKE_LOOKAHEAD_M) return false;
+        meters = distance;
+        referenceKmh = z.entryKmh;
+        return true;
+    }
+    int nextBrakeIndex() const { return nextRefValid && nextRef < refZoneCount ? nextRef : -1; }
+    // The last braking of this session: metres earlier (+) or later (-) than
+    // the reference lap (NAN without a reference), entry speed and the
+    // reference's. False until the first braking.
+    bool lastBrakeResult(float &deltaMeters, float &entryKmh, float &referenceKmh) const
+    {
+        if (!isfinite(resultEntryKmh)) return false;
+        deltaMeters = resultDelta;
+        entryKmh = resultEntryKmh;
+        referenceKmh = resultReferenceKmh;
+        return true;
+    }
+    int lastBrakeIndex() const { return resultIndex; }
+    // Result per reference braking point: this lap and the previous one.
+    // NAN where the pedal was not used (yet).
+    float brakeDelta(int i) const { return buffers && i >= 0 && i < refZoneCount ? buffers->curDelta[i] : NAN; }
+    float lastLapBrakeDelta(int i) const { return buffers && i >= 0 && i < refZoneCount ? buffers->lastDelta[i] : NAN; }
+    // Changes only when the reference braking points change (not with every
+    // braking): the map redraws its markers when it does.
+    uint32_t referenceBrakeRevision() const { return refZoneRev; }
+    uint32_t brakeRevision() const { return brakeRev; }
+
+    // ---- Persistence ---------------------------------------------------------------
+    // The circuit is saved after its map is complete and the reference lap
+    // every time it improves: takeSaveRequest says what to write, one block
+    // at a time. The caller stores the exported bytes and gives them back to
+    // importTrack and importReference in a later session.
+    uint32_t trackKey() const { return trackKeyValue; }
+    bool takeSaveRequest(SaveKind &kind)
+    {
+        if (trackKeyValue == 0) return false;
+        if (saveTrackPending) { saveTrackPending = false; kind = SaveKind::Track; return true; }
+        if (saveReferencePending) { saveReferencePending = false; kind = SaveKind::Reference; return true; }
+        return false;
+    }
+    // True while no circuit is known and a saved one could be loaded.
+    bool wantsTrack() const { return buffers && map.state == MapState::Waiting && trackKeyValue == 0; }
+    // Position and direction of the car, for recognising a saved circuit.
+    bool pose(float &x, float &z, float &hx, float &hz) const
+    {
+        if (!hasPrevious || !previous.hasPosition || !hasHeading || previous.speed < 8.0f) return false;
+        x = previous.x; z = previous.z;
+        hx = cosf(heading); hz = sinf(heading);
+        return true;
+    }
+    bool fractionMode() const { return lapFractionMode; }
+
+    bool exportTrack(uint8_t *out, size_t capacity, size_t &length) const
+    {
+        if (!buffers || map.state != MapState::Complete || trackKeyValue == 0 || capacity < TRACK_BLOB_SIZE)
+            return false;
+        blob::Writer w(out);
+        w.u32(TRACK_MAGIC);
+        w.u8(BLOB_VERSION);
+        w.u8(lapFractionMode ? 1 : 0);
+        w.u16(MAP_POINTS);
+        w.u16(static_cast<uint16_t>(lapCells));
+        w.u32(trackKeyValue);
+        w.f32(map.minX); w.f32(map.minZ); w.f32(map.maxX); w.f32(map.maxZ);
+        w.put(buffers->mapX, sizeof(float) * MAP_POINTS);
+        w.put(buffers->mapZ, sizeof(float) * MAP_POINTS);
+        w.u32(crc32(out, w.pos));
+        length = w.pos;
+        return true;
+    }
+
+    // Loads a saved circuit while no map is known. False if the block is
+    // damaged or was saved with another kind of source (distance or fraction).
+    bool importTrack(const uint8_t *data, size_t length)
+    {
+        if (!buffers || map.state != MapState::Waiting || length != TRACK_BLOB_SIZE) return false;
+        if (!blob::valid(data, length, TRACK_MAGIC)) return false;
+        blob::Reader r(data, length);
+        r.u32(); r.u8();
+        const uint8_t flags = r.u8();
+        const uint16_t points = r.u16(), cells = r.u16();
+        const uint32_t key = r.u32();
+        const float minX = r.f32(), minZ = r.f32(), maxX = r.f32(), maxZ = r.f32();
+        if (points != MAP_POINTS || key == 0 || cells > DELTA_CELLS || ((flags & 1) != 0) != lapFractionMode)
+            return false;
+        if (!isfinite(minX) || !isfinite(minZ) || !isfinite(maxX) || !isfinite(maxZ)) return false;
+        r.get(buffers->mapX, sizeof(float) * MAP_POINTS);
+        r.get(buffers->mapZ, sizeof(float) * MAP_POINTS);
+        if (!r.ok) return false;
+        map.minX = minX; map.minZ = minZ; map.maxX = maxX; map.maxZ = maxZ;
+        map.state = MapState::Complete;
+        map.rawCount = 0;
+        if (!lapFractionMode && cells > 0) lapCells = cells;
+        trackKeyValue = key;
+        offTrackChecks = 0;
+        saveTrackPending = false;
+        mapRev++;
+        sectorRev++;
+        return true;
+    }
+
+    // Is the car on the circuit of this saved block, going the same way?
+    static bool trackBlobMatches(const uint8_t *data, size_t length, float x, float z, float hx, float hz)
+    {
+        if (length != TRACK_BLOB_SIZE || !blob::valid(data, length, TRACK_MAGIC)) return false;
+        const size_t header = 4 + 1 + 1 + 2 + 2 + 4;
+        float bounds[4];
+        memcpy(bounds, data + header, sizeof(bounds));
+        const float margin = TRACK_MATCH_M;
+        if (x < bounds[0] - margin || x > bounds[2] + margin || z < bounds[1] - margin || z > bounds[3] + margin)
+            return false;
+        float mx[MAP_POINTS], mz[MAP_POINTS];
+        memcpy(mx, data + header + sizeof(bounds), sizeof(mx));
+        memcpy(mz, data + header + sizeof(bounds) + sizeof(mx), sizeof(mz));
+        int nearest = -1;
+        float best = TRACK_MATCH_M * TRACK_MATCH_M;
+        for (int k = 0; k < MAP_POINTS; ++k)
+        {
+            const float dx = mx[k] - x, dz = mz[k] - z, d = dx * dx + dz * dz;
+            if (d < best) { best = d; nearest = k; }
+        }
+        if (nearest < 0) return false;
+        // The same circuit run backwards is another circuit.
+        const int before = (nearest + MAP_POINTS - 2) % MAP_POINTS, after = (nearest + 2) % MAP_POINTS;
+        const float tx = mx[after] - mx[before], tz = mz[after] - mz[before];
+        const float length2 = hypotf(tx, tz);
+        return length2 > 0.1f && (tx * hx + tz * hz) / length2 > 0.5f;
+    }
+
+    bool exportReference(uint8_t *out, size_t capacity, size_t &length) const
+    {
+        if (!buffers || refLapMs <= 0 || refCells < 2 || trackKeyValue == 0) return false;
+        const size_t zones = static_cast<size_t>(refZoneCount);
+        const size_t size = REFERENCE_BLOB_HEADER + zones * BRAKE_ZONE_BLOB_SIZE + sizeof(uint32_t) * refCells + 4;
+        if (capacity < size) return false;
+        blob::Writer w(out);
+        w.u32(REFERENCE_MAGIC);
+        w.u8(BLOB_VERSION);
+        w.u8(lapFractionMode ? 1 : 0);
+        w.u16(static_cast<uint16_t>(refCells));
+        w.u32(trackKeyValue);
+        w.i32(refLapMs);
+        for (int i = 0; i < SECTORS; ++i) w.i32(refSector[i]);
+        w.u8(static_cast<uint8_t>(zones));
+        w.u8(0); w.u8(0); w.u8(0);
+        for (size_t i = 0; i < zones; ++i)
+        {
+            const BrakeZone &z = buffers->refZones[i];
+            w.f32(z.x); w.f32(z.z); w.f32(z.hx); w.f32(z.hz); w.f32(z.entryKmh); w.f32(z.peak);
+        }
+        w.put(buffers->refTime, sizeof(uint32_t) * refCells);
+        w.u32(crc32(out, w.pos));
+        length = w.pos;
+        return true;
+    }
+
+    // Loads the saved reference lap of this car on the known circuit.
+    bool importReference(const uint8_t *data, size_t length)
+    {
+        if (!buffers || trackKeyValue == 0 || length < REFERENCE_BLOB_HEADER + 4) return false;
+        if (!blob::valid(data, length, REFERENCE_MAGIC)) return false;
+        blob::Reader r(data, length);
+        r.u32(); r.u8();
+        const uint8_t flags = r.u8();
+        const uint16_t cells = r.u16();
+        const uint32_t key = r.u32();
+        const int32_t lapMs = r.i32();
+        int32_t sectors[SECTORS];
+        for (int i = 0; i < SECTORS; ++i) sectors[i] = r.i32();
+        const uint8_t zones = r.u8();
+        r.u8(); r.u8(); r.u8();
+        if (key != trackKeyValue || ((flags & 1) != 0) != lapFractionMode) return false;
+        if (cells < 2 || cells > DELTA_CELLS || lapMs <= 0 || zones > MAX_BRAKE_ZONES) return false;
+        if (length != REFERENCE_BLOB_HEADER + zones * BRAKE_ZONE_BLOB_SIZE + sizeof(uint32_t) * cells + 4) return false;
+        // The lap length must agree with the map (a cell or two of difference
+        // is the normal spread between laps).
+        if (!lapFractionMode && lapCells > 0 && abs(static_cast<int>(cells) - lapCells) > lapCells / 20 + 2) return false;
+        BrakeZone loaded[MAX_BRAKE_ZONES];
+        for (int i = 0; i < zones; ++i)
+        {
+            BrakeZone &z = loaded[i];
+            z.x = r.f32(); z.z = r.f32(); z.hx = r.f32(); z.hz = r.f32(); z.entryKmh = r.f32(); z.peak = r.f32();
+        }
+        r.get(buffers->refTime, sizeof(uint32_t) * cells);
+        if (!r.ok) return false;
+        refLapMs = lapMs;
+        refCells = cells;
+        if (!lapFractionMode) lapCells = cells;
+        for (int i = 0; i < SECTORS; ++i) refSector[i] = sectors[i];
+        for (int i = 0; i < zones; ++i) buffers->refZones[i] = loaded[i];
+        refZoneCount = zones;
+        for (int i = 0; i < MAX_BRAKE_ZONES; ++i) buffers->curDelta[i] = buffers->lastDelta[i] = NAN;
+        nextRef = 0;
+        nextRefValid = false;
+        saveReferencePending = false;
+        brakeRev++;
+        refZoneRev++;
+        sectorRev++;
+        return true;
+    }
+
 private:
     static constexpr uint32_t STAGE_MS = 1000;      // stopped this long to stage
     static constexpr uint32_t TREE_AMBER_MS = 1000; // first amber after staging
@@ -432,6 +763,10 @@ private:
         float rawZ[MAP_RAW_POINTS];
         float mapX[MAP_POINTS];        // completed map
         float mapZ[MAP_POINTS];
+        BrakeZone curZones[MAX_BRAKE_ZONES]; // braking points of this lap
+        BrakeZone refZones[MAX_BRAKE_ZONES]; // of the reference lap
+        float curDelta[MAX_BRAKE_ZONES];     // per reference zone, this lap (NAN: not braked)
+        float lastDelta[MAX_BRAKE_ZONES];    // the same for the previous lap
     };
     Buffers *buffers;
 
@@ -507,6 +842,32 @@ private:
     bool fuelArmed = true;
     float fuelLowest = NAN;
 
+    // Braking points.
+    struct BrakeTracker
+    {
+        bool active = false;      // pedal down, zone being followed
+        bool confirmed = false;
+        bool released = false;    // pedal below BRAKE_OFF, waiting to end
+        uint32_t startMs = 0;
+        uint32_t releasedMs = 0;
+        uint32_t lastEndMs = 0;
+        bool hasEnded = false;
+        BrakeZone zone;
+        float startSpeed = 0;
+    };
+    BrakeTracker braking;
+    int curZoneCount = 0, refZoneCount = 0;
+    int nextRef = 0;              // next reference zone of this lap
+    bool nextRefValid = false;
+    int resultIndex = -1;         // reference zone the last braking was matched with
+    float resultDelta = NAN;      // metres: + braked earlier than the reference
+    float resultEntryKmh = NAN, resultReferenceKmh = NAN;
+    uint32_t brakeRev = 0, refZoneRev = 0;
+
+    // Persistence.
+    uint32_t trackKeyValue = 0;
+    bool saveTrackPending = false, saveReferencePending = false;
+
     Event events[EVENT_QUEUE];
     int eventHead = 0, eventCount = 0;
 
@@ -553,6 +914,8 @@ private:
     {
         lap.continuous = false;
         lap.observed = false;
+        braking.active = false;
+        nextRefValid = false; // after a rewind the next braking point is searched again
         if (map.state == MapState::Recording) { map.state = MapState::Waiting; map.rawCount = 0; mapRev++; }
         // Without the fraction of the lap, the distance from the line is lost.
         if (!lapFractionMode) lap.progressKnown = false;
@@ -603,6 +966,7 @@ private:
 
     void beginLap(const Sample &s, bool fromLine)
     {
+        startBrakeLap(fromLine);
         lap = LapState();
         lap.observed = fromLine;
         lap.startClockMs = s.timeMs;
@@ -728,6 +1092,8 @@ private:
             memcpy(buffers->refTime, buffers->curTime, sizeof(uint32_t) * refCells);
             if (!lapFractionMode) lapCells = refCells;
             for (int i = 0; i < SECTORS; ++i) refSector[i] = lap.sectorMs[i];
+            promoteBrakeZones();
+            saveReferencePending = true;
         }
         for (int i = 0; i < SECTORS; ++i) lastLapSector[i] = lap.sectorState[i];
         sectorRev++;
@@ -963,6 +1329,8 @@ private:
         }
         map.state = MapState::Complete;
         mapRev++;
+        trackKeyValue = computeTrackKey(total);
+        saveTrackPending = true;
     }
 
     // Far from the recorded map for a while: another circuit, start over.
@@ -1205,6 +1573,197 @@ private:
                 launchRev++;
             }
         }
+    }
+
+    // ---- Braking points --------------------------------------------------------------
+    void clearBrakeZones(bool includeReference)
+    {
+        braking = BrakeTracker();
+        curZoneCount = 0;
+        nextRef = 0;
+        nextRefValid = false;
+        resultIndex = -1;
+        resultDelta = resultEntryKmh = resultReferenceKmh = NAN;
+        if (buffers)
+            for (int i = 0; i < MAX_BRAKE_ZONES; ++i) buffers->curDelta[i] = buffers->lastDelta[i] = NAN;
+        if (includeReference) { refZoneCount = 0; refZoneRev++; }
+        brakeRev++;
+    }
+
+    // A lap begins: the results of the one just finished become "previous".
+    void startBrakeLap(bool fromLine)
+    {
+        if (!buffers) return;
+        if (fromLine)
+        {
+            for (int i = 0; i < MAX_BRAKE_ZONES; ++i)
+            {
+                buffers->lastDelta[i] = buffers->curDelta[i];
+                buffers->curDelta[i] = NAN;
+            }
+            nextRef = 0;
+            nextRefValid = true;
+        }
+        else
+        {
+            for (int i = 0; i < MAX_BRAKE_ZONES; ++i) buffers->curDelta[i] = NAN;
+            nextRefValid = false; // joined in the middle of a lap: found again from the position
+        }
+        curZoneCount = 0;
+        brakeRev++;
+    }
+
+    // This lap is the new reference: its braking points are the ones to beat.
+    void promoteBrakeZones()
+    {
+        if (!buffers || curZoneCount == 0) return;
+        for (int i = 0; i < curZoneCount; ++i) buffers->refZones[i] = buffers->curZones[i];
+        refZoneCount = curZoneCount;
+        // The results of this lap were against the old reference.
+        for (int i = 0; i < MAX_BRAKE_ZONES; ++i) buffers->curDelta[i] = NAN;
+        brakeRev++;
+        refZoneRev++;
+    }
+
+    // Reference braking point of the same corner: close ahead or behind, same
+    // direction, not matched yet in this lap. Returns the index or -1; delta
+    // is how many metres earlier (+) the pedal went down.
+    int matchReference(const BrakeZone &z, float &delta) const
+    {
+        int best = -1;
+        float bestDistance = 1e9f;
+        for (int j = 0; j < refZoneCount; ++j)
+        {
+            if (isfinite(buffers->curDelta[j])) continue;
+            const BrakeZone &ref = buffers->refZones[j];
+            if (ref.hx * z.hx + ref.hz * z.hz < 0.7f) continue;
+            const float dx = ref.x - z.x, dz = ref.z - z.z;
+            const float along = dx * z.hx + dz * z.hz;
+            const float side = -dx * z.hz + dz * z.hx;
+            if (fabsf(along) > BRAKE_MATCH_ALONG_M || fabsf(side) > BRAKE_MATCH_SIDE_M) continue;
+            const float distance = hypotf(along, side);
+            if (distance < bestDistance) { bestDistance = distance; best = j; delta = along; }
+        }
+        return best;
+    }
+
+    // Keeps track of the next reference braking point of this lap.
+    void updateNextReference(const Sample &s)
+    {
+        if (refZoneCount == 0) return;
+        const float hx = cosf(heading), hz = sinf(heading);
+        if (!nextRefValid)
+        {
+            int best = -1;
+            float bestAhead = 1e9f;
+            for (int j = 0; j < refZoneCount; ++j)
+            {
+                const BrakeZone &ref = buffers->refZones[j];
+                const float dx = ref.x - s.x, dz = ref.z - s.z;
+                const float ahead = dx * hx + dz * hz, side = -dx * hz + dz * hx;
+                if (ahead > 0.0f && ahead < 800.0f && fabsf(side) < 60.0f && ahead < bestAhead)
+                {
+                    bestAhead = ahead;
+                    best = j;
+                }
+            }
+            if (best >= 0) { nextRef = best; nextRefValid = true; brakeRev++; }
+            return;
+        }
+        // Past the point (and close to it): on to the next one.
+        while (nextRef < refZoneCount)
+        {
+            const BrakeZone &ref = buffers->refZones[nextRef];
+            const float dx = ref.x - s.x, dz = ref.z - s.z;
+            if (dx * hx + dz * hz < -20.0f && hypotf(dx, dz) < 120.0f) { nextRef++; brakeRev++; }
+            else break;
+        }
+    }
+
+    void confirmBrakeZone()
+    {
+        braking.confirmed = true;
+        const BrakeZone &z = braking.zone;
+        if (curZoneCount < MAX_BRAKE_ZONES) buffers->curZones[curZoneCount++] = z;
+        float delta = NAN;
+        const int match = matchReference(z, delta);
+        resultIndex = match;
+        resultEntryKmh = z.entryKmh;
+        if (match >= 0)
+        {
+            buffers->curDelta[match] = delta;
+            nextRef = match + 1;
+            nextRefValid = true;
+            resultDelta = delta;
+            resultReferenceKmh = buffers->refZones[match].entryKmh;
+        }
+        else
+        {
+            resultDelta = NAN;
+            resultReferenceKmh = NAN;
+        }
+        brakeRev++;
+    }
+
+    void updateBrakeZones(const Sample &s)
+    {
+        if (!buffers || !s.hasPosition || !hasHeading) { braking.active = false; return; }
+        updateNextReference(s);
+
+        if (!braking.active)
+        {
+            if (s.brake < BRAKE_ON || s.speed < BRAKE_MIN_SPEED) return;
+            if (braking.hasEnded && static_cast<int32_t>(s.timeMs - braking.lastEndMs) < static_cast<int32_t>(BRAKE_GAP_MS))
+                return;
+            braking.active = true;
+            braking.confirmed = false;
+            braking.released = false;
+            braking.startMs = s.timeMs;
+            braking.startSpeed = s.speed;
+            braking.zone.x = s.x; braking.zone.z = s.z;
+            braking.zone.hx = cosf(heading); braking.zone.hz = sinf(heading);
+            braking.zone.entryKmh = s.speed * 3.6f;
+            braking.zone.peak = s.brake;
+            return;
+        }
+
+        const int32_t sinceStart = static_cast<int32_t>(s.timeMs - braking.startMs);
+        if (sinceStart < 0) { braking.active = false; return; } // the clock went back
+        if (s.brake > braking.zone.peak) braking.zone.peak = s.brake;
+        if (s.brake < BRAKE_OFF)
+        {
+            if (!braking.released) { braking.released = true; braking.releasedMs = s.timeMs; }
+            else if (static_cast<int32_t>(s.timeMs - braking.releasedMs) >= static_cast<int32_t>(BRAKE_RELEASE_MS))
+            {
+                braking.active = false;
+                braking.hasEnded = true;
+                braking.lastEndMs = s.timeMs;
+            }
+            return;
+        }
+        braking.released = false;
+        if (!braking.confirmed && sinceStart >= static_cast<int32_t>(BRAKE_CONFIRM_MS))
+        {
+            // A real braking slows the car down; a brush of the pedal does not.
+            if (braking.startSpeed - s.speed >= BRAKE_MIN_DROP) confirmBrakeZone();
+            else { braking.active = false; braking.hasEnded = true; braking.lastEndMs = s.timeMs; }
+        }
+    }
+
+    uint32_t computeTrackKey(float totalLength) const
+    {
+        // The start line (to 10 m) and the length (to 50 m) name the circuit.
+        const int32_t parts[3] = {static_cast<int32_t>(lroundf(0.1f * buffers->mapX[0])),
+                                  static_cast<int32_t>(lroundf(0.1f * buffers->mapZ[0])),
+                                  static_cast<int32_t>(lroundf(totalLength / 50.0f))};
+        uint32_t hash = 2166136261u;
+        for (int i = 0; i < 3; ++i)
+            for (int b = 0; b < 4; ++b)
+            {
+                hash ^= (static_cast<uint32_t>(parts[i]) >> (8 * b)) & 0xFF;
+                hash *= 16777619u;
+            }
+        return hash != 0 ? hash : 1u;
     }
 
     void updateFuel(const Sample &s)

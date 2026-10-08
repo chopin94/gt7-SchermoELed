@@ -2,8 +2,9 @@
 #include "SimHubProtocol.h"
 #include "ACUdpTelemetry.h"
 #include "LapAnalysis.h"
+#include "GripAnalysis.h"
+#include "TrackStore.h"
 #include "DashboardWiFiCredentials.h"
-#include <OtaImage.h>
 #include <qrcode.h>
 
 #ifndef __SHCUSTOMPROTOCOL_H__
@@ -25,7 +26,6 @@
 #include <HTTPClient.h>
 #include "sparco_racing_bg.h"
 #include "sparco_logo.h"
-#include "version.h"
 
 static LGFX tft;
 
@@ -153,6 +153,8 @@ enum class DashboardTheme : uint8_t
 	TrackMap = 12,
 	Telemetry = 13,
 	Performance = 14,
+	Grip = 15,
+	Brake = 16,
 };
 
 struct DashboardThemeDescriptor
@@ -177,6 +179,8 @@ static constexpr DashboardThemeDescriptor DASHBOARD_THEMES[] = {
 	{DashboardTheme::TrackMap, "MAPPA PISTA"},
 	{DashboardTheme::Telemetry, "TELEMETRIA"},
 	{DashboardTheme::Performance, "PRESTAZIONI"},
+	{DashboardTheme::Grip, "ADERENZA"},
+	{DashboardTheme::Brake, "FRENATA"},
 };
 static constexpr size_t DASHBOARD_THEME_COUNT =
 	sizeof(DASHBOARD_THEMES) / sizeof(DASHBOARD_THEMES[0]);
@@ -293,14 +297,7 @@ private:
     // Wi-Fi mode (GT7 or AC) waiting for the network before it is selected.
     TelemetryMode pendingWifiMode = TelemetryMode::GT7;
     String networkStatus = "Wi-Fi not configured";
-    // Firmware update over Wi-Fi: the page runs in main.cpp (DashboardUpdate),
-    // the screen tells where to open it and shows the progress of a transfer.
-    bool wifiConnected = false, updatePageReady = false;
-    bool firmwareUpdateActive = false; // full-screen progress on display
-    OtaImage::Progress firmwareUpdate;
-    OtaImage::Phase firmwareUpdateDrawnPhase = OtaImage::Phase::Idle;
-    int firmwareUpdateDrawnPercent = -1;
-    uint32_t firmwareUpdateChangedAt = 0;
+    bool wifiConnected = false;
     bool receivingCustom = false, customOverflow = false, customProtocolError = false;
     char customLine[SimHubProtocol::maxLength] = {};
     unsigned customLength = 0;
@@ -317,6 +314,13 @@ private:
 	// Lap analysis of the direct sources (GT7 and Assetto Corsa): live delta,
 	// sectors, track map, G-forces, acceleration runs and session summary.
 	LapAnalysis::Analyzer lapAnalysis;
+	// Wheel slip, lock-ups, tyre temperatures and suspension load (GT7 only).
+	GripAnalysis::Analyzer gripAnalysis;
+	// Saved circuits and reference laps (null when there is no file system).
+	TrackStore::Store *trackStore = nullptr;
+	uint32_t trackScanMs = 0;
+	uint32_t referenceTriedKey = 0, serviceTrackKey = 0;
+	int32_t referenceTriedCar = 0;
 	TelemetrySource analysisSource = TelemetrySource::None;
 	int32_t lastGT7CarCode = 0;
 	bool notificationsEnabled = true;
@@ -407,7 +411,6 @@ private:
 		TouchCalibration,
 		LedSettings,
 		Features,
-		FirmwareUpdate,
 	};
 
 	static constexpr unsigned long SETTINGS_TIMEOUT_MS = 15000UL;
@@ -638,7 +641,7 @@ private:
 			? static_cast<DashboardTheme>(storedTheme)
 			: DashboardTheme::GT3;
 
-#if GT7_DASHBOARD_THEME_PREVIEW >= 0 && GT7_DASHBOARD_THEME_PREVIEW <= 14
+#if GT7_DASHBOARD_THEME_PREVIEW >= 0 && GT7_DASHBOARD_THEME_PREVIEW <= 16
 		activeDashboardTheme =
 			static_cast<DashboardTheme>(GT7_DASHBOARD_THEME_PREVIEW);
 #endif
@@ -948,6 +951,36 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 #endif
 	}
 
+	void setTrackStore(TrackStore::Store *store) { trackStore = store; }
+
+	// Saves what the lap analysis asks to and loads a saved circuit once the
+	// car is on it, then the best lap of the car on that circuit.
+	void serviceTrackStore(int32_t carCode)
+	{
+		if (!trackStore) return;
+		trackStore->service(lapAnalysis, carCode);
+		// Another circuit (or none after a reset): its laps are looked for anew.
+		if (lapAnalysis.trackKey() != serviceTrackKey)
+		{
+			serviceTrackKey = lapAnalysis.trackKey();
+			referenceTriedKey = 0;
+		}
+		const uint32_t now = millis();
+		if (lapAnalysis.wantsTrack() && now - trackScanMs >= 2000)
+		{
+			trackScanMs = now;
+			trackStore->restoreTrack(lapAnalysis);
+		}
+		// Once for each circuit and car: a lap driven since then is better.
+		if (lapAnalysis.trackKey() != 0 && lapAnalysis.referenceLapMs() < 0 &&
+			(referenceTriedKey != lapAnalysis.trackKey() || referenceTriedCar != carCode))
+		{
+			referenceTriedKey = lapAnalysis.trackKey();
+			referenceTriedCar = carCode;
+			trackStore->restoreReference(lapAnalysis, carCode);
+		}
+	}
+
 #if INCLUDE_GT7_WIFI
 	bool readGT7Wifi(DashboardState &state)
 	{
@@ -1207,7 +1240,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Lap analysis: live delta, sectors, track map, G-forces, runs.
 		// Another car on the same circuit: the times start over, the map stays.
 		if (data.carCode != 0 && lastGT7CarCode != 0 && data.carCode != lastGT7CarCode)
+		{
 			lapAnalysis.resetTiming();
+			gripAnalysis.resetCar();
+		}
 		if (data.carCode != 0) lastGT7CarCode = data.carCode;
 		LapAnalysis::Sample sample;
 		// GT7 sends one packet per frame at 60 Hz: the packet id is the clock.
@@ -1231,6 +1267,27 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		sample.fuelFraction = validIceFuel ? data.fuelLevel / data.fuelCapacity : NAN;
 		sample.fuelLaps = !state.fuelIsEV && estimatedFuelLaps >= 0.0f ? estimatedFuelLaps : NAN;
 		lapAnalysis.update(sample);
+
+		GripAnalysis::Sample grip;
+		grip.timeMs = sample.timeMs;
+		grip.speed = sample.speed;
+		grip.driving = sample.driving;
+		grip.hasWheels = true;
+		for (int i = 0; i < GripAnalysis::WHEELS; ++i)
+		{
+			grip.wheelRps[i] = data.wheelRPS[i];
+			grip.tyreRadius[i] = data.tyreRadius[i];
+			grip.tyreTemp[i] = data.tyreTemp[i];
+			grip.suspension[i] = data.suspHeight[i];
+		}
+		grip.throttle = sample.throttle;
+		grip.brake = sample.brake;
+		grip.lateralG = lapAnalysis.lateralG();
+		grip.longitudinalG = lapAnalysis.longitudinalG();
+		grip.lapCount = data.lapCount;
+		gripAnalysis.update(grip);
+		serviceTrackStore(lastGT7CarCode); // the last real code: GT7 sends 0 now and then
+
 		if (liveDeltaMode) state.sessionBestLiveDeltaSeconds = liveDeltaText();
 		takeAnalysisEvents(state);
 
@@ -1370,6 +1427,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		sample.throttle = constrain(car.gas, 0.0f, 1.0f);
 		sample.brake = constrain(car.brake, 0.0f, 1.0f);
 		lapAnalysis.update(sample);
+		serviceTrackStore(0);
 		if (liveDeltaMode) state.sessionBestLiveDeltaSeconds = liveDeltaText();
 		takeAnalysisEvents(state);
 		return true;
@@ -1413,26 +1471,6 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         if (networkStatus != status || wifiPortalActive != portal) {
             networkStatus = status; wifiPortalActive = portal; connectingScreenActive = false;
         }
-    }
-    // The update page (http://<address>/) is listening.
-    void updatePageState(bool ready) { updatePageReady = ready; }
-    // Called while a firmware arrives: the main loop is busy with the transfer,
-    // so the progress is drawn right away.
-    void firmwareUpdateProgress(const OtaImage::Progress &progress)
-    {
-        const bool starting = !firmwareUpdateActive;
-        if (starting)
-        {
-            // The progress must be visible even if the screen was asleep.
-            screenSleeping = false;
-            screenOffByUser = false;
-            currentBrightness = normalBrightness();
-            tft.setBrightness(currentBrightness);
-            firmwareUpdateActive = true;
-        }
-        firmwareUpdate = progress;
-        firmwareUpdateChangedAt = millis();
-        drawFirmwareUpdateScreen(starting || progress.phase != firmwareUpdateDrawnPhase);
     }
     void initializeTelemetry() {
         WiFi.mode(WIFI_STA);
@@ -1601,7 +1639,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         // Another game: the lap analysis starts over. A pause in the data of
         // the same game (menus, PS5 standby) keeps the map and the session.
         if (selected != TelemetrySource::None && selected != analysisSource) {
-            if (analysisSource != TelemetrySource::None) lapAnalysis.reset();
+            if (analysisSource != TelemetrySource::None) { lapAnalysis.reset(); gripAnalysis.reset(); }
             analysisSource = selected;
         }
         if (before != selected) {
@@ -1626,10 +1664,6 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 	void loop()
 	{
-		// A firmware update holds the whole screen until it ends; after an
-		// error the previous screen comes back by itself.
-		if (firmwareUpdateActive && !serviceFirmwareUpdateScreen()) return;
-
         updateTelemetry();
 		updateLedDiscovery();
 
@@ -1649,10 +1683,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Touch calibration is an idle-only recovery aid. Live telemetry always
 		// wins immediately, discarding any unconfirmed candidate so this screen
 		// can never hold the dashboard or its runtime services open.
-		// The update page screen has no timeout (the file takes a while to
-		// pick), so it gives way to live telemetry in the same way.
-		if ((settingsScreen == SettingsScreen::TouchCalibration ||
-			settingsScreen == SettingsScreen::FirmwareUpdate) && previousGameRunning)
+		if (settingsScreen == SettingsScreen::TouchCalibration && previousGameRunning)
 		{
 			closeSettings();
 		}
@@ -1660,11 +1691,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Keep reading touch while asleep so a tap can wake the display and a
 		// long press can open Settings.
         readTouch();
-        if ((settingsScreen == SettingsScreen::WifiSettings || settingsScreen == SettingsScreen::FirmwareUpdate) &&
+        if (settingsScreen == SettingsScreen::WifiSettings &&
             settingsPressedButton < 0 && millis() - settingsStatusRefresh > 1000) {
             settingsStatusRefresh = millis();
-            const String currentStatus = String(sourceName()) + ":" + networkStatus +
-                (wifiConnected && updatePageReady ? ":update" : "");
+            const String currentStatus = String(sourceName()) + ":" + networkStatus;
             if (prevData["connectionStatus"] != currentStatus) {
                 prevData["connectionStatus"] = currentStatus; drawSettingsScreen();
             }
@@ -1720,6 +1750,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			// The telemetry graphs use about 36 KB of sprites: free them for
 			// the other themes.
 			if (activeDashboardTheme != DashboardTheme::Telemetry) releaseTelemetrySprites();
+			if (activeDashboardTheme != DashboardTheme::Grip) releaseGripSprites();
 			invalidateDashboardRenderer();
 		}
 
@@ -1791,6 +1822,12 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		case DashboardTheme::Performance:
 			drawPerformanceDashboard(state, forceUpdate);
 			break;
+		case DashboardTheme::Grip:
+			drawGripDashboard(state, forceUpdate);
+			break;
+		case DashboardTheme::Brake:
+			drawBrakeDashboard(state, forceUpdate);
+			break;
 		case DashboardTheme::GT3:
 		default:
 #if GT7_DASHBOARD_LEGACY_UI
@@ -1850,11 +1887,12 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 #include "dashboard/AnalysisWidgets.inc"
 #include "dashboard/SessionScreens.inc"
-#include "dashboard/FirmwareUpdateScreens.inc"
 #include "dashboard/themes/FormulaTheme.inc"
 #include "dashboard/themes/TrackMapTheme.inc"
 #include "dashboard/themes/TelemetryTheme.inc"
 #include "dashboard/themes/PerformanceTheme.inc"
+#include "dashboard/themes/GripTheme.inc"
+#include "dashboard/themes/BrakeTheme.inc"
 
 	void drawThemePlaceholder(
 		const DashboardState &state,
@@ -2477,12 +2515,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			drawSettingsButton(212, 111, 88, 38, "SIMHUB", pressedButton == 3,
 				telemetry.mode == TelemetryMode::SimHub);
 			drawSettingsButton(20, 158, 280, 38, "RIPRISTINA DI FABBRICA", pressedButton == 4, false, true);
-			drawSettingsButton(20, 204, 136, 28, "AGGIORNAMENTO", pressedButton == 7);
-			drawSettingsButton(164, 204, 136, 28, "INDIETRO", pressedButton == 5);
-		}
-		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
-		{
-			drawFirmwareUpdateInfo(pressedButton);
+			drawSettingsButton(20, 204, 280, 28, "INDIETRO", pressedButton == 5);
 		}
 		else if (settingsScreen == SettingsScreen::ResetConfirmation)
 		{
@@ -2557,14 +2590,8 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 					telemetry.mode == TelemetryMode::SimHub);
 			else if (button == 4)
 				drawSettingsButton(20, 158, 280, 38, "RIPRISTINA DI FABBRICA", pressed, false, true);
-			else if (button == 7)
-				drawSettingsButton(20, 204, 136, 28, "AGGIORNAMENTO", pressed);
 			else if (button == 5)
-				drawSettingsButton(164, 204, 136, 28, "INDIETRO", pressed);
-		}
-		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
-		{
-			if (button == 0) drawSettingsButton(105, 204, 110, 28, "INDIETRO", pressed);
+				drawSettingsButton(20, 204, 280, 28, "INDIETRO", pressed);
 		}
 		else if (settingsScreen == SettingsScreen::ResetConfirmation)
 		{
@@ -2769,12 +2796,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 			if (touchInside(116, 111, 88, 38)) return 6;
 			if (touchInside(212, 111, 88, 38)) return 3;
 			if (touchInside(20, 158, 280, 38)) return 4;
-			if (touchInside(20, 204, 136, 28)) return 7;
-			if (touchInside(164, 204, 136, 28)) return 5;
-		}
-		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
-		{
-			if (touchInside(105, 204, 110, 28)) return 0;
+			if (touchInside(20, 204, 280, 28)) return 5;
 		}
 		else if (settingsScreen == SettingsScreen::ResetConfirmation)
 		{
@@ -2850,9 +2872,13 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 			}
 			else if (button == 4)
 			{
+				// What was saved for this circuit goes too: a map that is wrong
+				// would otherwise come back at the next start.
+				if (trackStore) trackStore->eraseTrack(lapAnalysis.trackKey());
 				lapAnalysis.reset();
+				gripAnalysis.reset();
 				notificationCount = 0;
-				featuresStatus = "Mappa, tempi e prove azzerati";
+				featuresStatus = trackStore ? "Azzerati mappa, tempi e dati salvati" : "Mappa, tempi e prove azzerati";
 			}
 			else if (button == 5)
 			{
@@ -2970,12 +2996,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 				requestConnection(TelemetryMode::AC, SettingsScreen::DeviceSettings);
 			else if (button == 3) selectConnection(TelemetryMode::SimHub);
 			else if (button == 4) showWifiResetConfirm();
-			else if (button == 7) showSettingsScreen(SettingsScreen::FirmwareUpdate);
 			else if (button == 5) showSettingsScreen(SettingsScreen::Main);
-		}
-		else if (settingsScreen == SettingsScreen::FirmwareUpdate)
-		{
-			if (button == 0) showSettingsScreen(SettingsScreen::DeviceSettings);
 		}
         else if (settingsScreen == SettingsScreen::ResetConfirmation) {
             if (button == 1) {
@@ -2987,6 +3008,9 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
                 notificationsEnabled = true;
                 liveDeltaMode = true;
                 notificationCount = 0;
+                if (trackStore) trackStore->eraseAll();
+                lapAnalysis.reset();
+                gripAnalysis.reset();
                 touchRotation = pendingTouchRotation = TouchRotation::Deg0;
                 touchSetupRequired = true;
                 connectionChoiceCanCancel = false;
@@ -3123,7 +3147,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 		if (settingsScreen != SettingsScreen::Closed)
 		{
 			if (!firstRun && settingsScreen != SettingsScreen::WifiSettings &&
-				settingsScreen != SettingsScreen::FirmwareUpdate && !isTouched && settingsLastInteractionTime != 0 &&
+				!isTouched && settingsLastInteractionTime != 0 &&
 				millis() - settingsLastInteractionTime >= SETTINGS_TIMEOUT_MS)
 			{
 				closeSettings();
