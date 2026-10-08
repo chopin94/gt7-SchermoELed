@@ -1286,7 +1286,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		grip.longitudinalG = lapAnalysis.longitudinalG();
 		grip.lapCount = data.lapCount;
 		gripAnalysis.update(grip);
-		serviceTrackStore(data.carCode);
+		serviceTrackStore(lastGT7CarCode); // the last real code: GT7 sends 0 now and then
 
 		if (liveDeltaMode) state.sessionBestLiveDeltaSeconds = liveDeltaText();
 		takeAnalysisEvents(state);

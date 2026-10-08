@@ -149,7 +149,7 @@ GT7 non dice su che pista sei: lo schermo lo capisce dalla posizione e dalla dir
 - **Limiti.** Fino a **16 circuiti** e **48 giri di riferimento**: oltre, i più vecchi vengono sostituiti. Un file danneggiato (CRC sbagliato, scrittura interrotta) viene ignorato e il circuito si registra di nuovo.
 - **Azzerare.** *FUNZIONI → azzera mappa e tempi* cancella anche i dati salvati del circuito in corso (altrimenti una mappa sbagliata tornerebbe al prossimo avvio). Il *ripristino di fabbrica* cancella tutto.
 - **Assetto Corsa** salva a parte (usa la frazione del giro e non la distanza): un circuito imparato con GT7 non si carica in AC e viceversa.
-- Se il filesystem non si monta, lo schermo funziona come prima senza salvare nulla. La prima volta dopo la nuova tabella delle partizioni formatta lo spazio (un paio di secondi all'avvio).
+- Se il filesystem non si monta, lo schermo funziona come prima senza salvare nulla. La prima volta dopo la nuova tabella delle partizioni formatta lo spazio: l'avvio dura qualche secondo in più (fino a una decina, solo quella volta).
 
 ---
 
@@ -461,7 +461,7 @@ Il codice nuovo è provato da test su PC e dal simulatore, e compila per tutte l
 - **Slittamento delle ruote**: con l'auto ferma in curva lenta o in retromarcia le barre devono restare neutre; un bloccaggio vero (freno a fondo senza ABS) deve accendere la ruota rossa. Se con l'ABS attivo il riquadro si accende troppo spesso, le soglie sono in testa a [`GripAnalysis.h`](firmware/dashboard/src/GripAnalysis.h) (`LOCK_SLIP`, `SPIN_SLIP`).
 - **Carico delle sospensioni**: l'unità di `suspHeight` non è documentata. Il verso si impara in frenata, ma la scala (il movimento massimo visto) si assesta dopo qualche giro: nei primi minuti le barre blu possono sembrare esagerate.
 - **Punti di frenata**: le soglie (25% di pedale, 72 km/h, 0,35 s) sono in testa a [`LapAnalysis.h`](firmware/dashboard/src/LapAnalysis.h). Su un circuito con chicane molto vicine due frenate possono fondersi in una (si apre una nuova frenata solo 1,5 s dopo la fine della precedente).
-- **Circuiti salvati**: al primo avvio dopo l'installazione lo schermo formatta il filesystem (un paio di secondi di schermo nero in più). Per controllare che salvi, guida due giri e riavvia: al giro lanciato successivo mappa e punti di frenata devono comparire subito.
+- **Circuiti salvati**: al primo avvio dopo l'installazione lo schermo formatta il filesystem e l'avvio dura qualche secondo in più (fino a una decina, solo quella volta). Per controllare che salvi, guida due giri e riavvia: al giro lanciato successivo mappa e punti di frenata devono comparire subito.
 - **Forze G**: restano calcolate da velocità e traiettoria. Il pacchetto GT7 contiene anche le accelerazioni (`sway`, `heave`, `surge`) ma senza unità documentate; non le ho usate senza poterle confrontare in gioco.
 
 ## Prossimi passi
