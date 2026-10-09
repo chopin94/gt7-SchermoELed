@@ -98,6 +98,25 @@
 			TFT_WHITE, fill, refill || forceUpdate, scale);
 	}
 
+	// Live delta of the cockpit themes (Ferrari, BMW M), which have no lap
+	// times: on the right of the speed digits, above "km/h". Green ahead, red
+	// behind, grey before there is a reference lap.
+	void drawCockpitDelta(const String &delta, bool forceUpdate)
+	{
+		static constexpr int RIGHT = 244, LABEL_Y = 152, VALUE_Y = 170, WIDTH = 48;
+		const int sign = deltaSign(delta);
+		const uint16_t color = sign < 0 ? analysisGreen() : sign > 0 ? analysisRed() : analysisMuted();
+		// Seven characters would run into the speed digits: from 10 s one decimal.
+		String text = delta;
+		const int dot = text.indexOf('.');
+		if (text.length() > 6 && dot > 0) text = text.substring(0, dot + 2);
+		drawAnalysisText("cockDeltaLabel", "DELTA", RIGHT, LABEL_Y, WIDTH, TR_DATUM, &fonts::Font0,
+			analysisMuted(), TFT_BLACK, forceUpdate);
+		drawAnalysisText("cockDelta", text, RIGHT, VALUE_Y, WIDTH, MR_DATUM, &fonts::Font2,
+			color, TFT_BLACK, forceUpdate);
+		restoreDefaultText();
+	}
+
 	// Three sector segments; the running one is white, the others coloured by
 	// their time (purple best, green better than the best lap, yellow slower).
 	void drawSectorBar(const char *id, int x, int y, int w, int h, int gap, bool withTimes,

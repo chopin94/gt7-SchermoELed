@@ -561,6 +561,7 @@
 		drawFerrariRevLeds(state, forceUpdate);
 		drawFerrariGear(state.gear, forceUpdate, gearSprite, gearSpriteCreated, gearX);
 		drawFerrariSpeed(state.speed, forceUpdate, speedSprite, speedSpriteCreated);
+		drawCockpitDelta(state.sessionBestLiveDeltaSeconds, forceUpdate);
 		drawFerrariPedalBars(state, forceUpdate);
 	}
 

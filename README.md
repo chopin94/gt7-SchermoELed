@@ -84,7 +84,7 @@ flowchart LR
 - 🏎️ Telemetria **Assetto Corsa** in Wi-Fi (PC e console): il limite dei giri viene imparato per ogni auto
 - 🔌 **SimHub USB** per i giochi PC, con [un'unica formula valida per tutti i temi](firmware/dashboard/simhub/custom-protocol.txt)
 - 🎨 **17 temi** selezionabili con anteprima dal touch
-- ⏱️ **Delta live** metro per metro rispetto al giro migliore, in tutti i temi (oppure differenza ultimo giro - migliore, a scelta)
+- ⏱️ **Delta live** metro per metro rispetto al giro migliore, in 14 temi su 17: tutti tranne PRESTAZIONI, ADERENZA e FRENATA, che hanno altro da mostrare (oppure differenza ultimo giro - migliore, a scelta). Finché non c'è un giro di riferimento mostra `--`
 - 🟪 **3 settori** con i colori della F1: viola miglior tempo, verde meglio del giro migliore, giallo più lento
 - 🗺️ **Mappa del circuito** disegnata da sola durante il primo giro, con la posizione dell'auto e i settori colorati
 - 📈 **Forze G** con scia e **tracce di gas e freno** in stile MoTeC
@@ -119,7 +119,7 @@ GT7 e Assetto Corsa trasmettono solo dati grezzi: posizione, velocità, contagir
 
 | Cosa | Come viene calcolato |
 | --- | --- |
-| **Delta live** | Durante ogni giro lo schermo salva il tempo ogni 12,5 m di strada percorsa (GT7) o ogni 1/2048 di giro (AC, che fornisce la frazione del giro). Il delta confronta il tempo attuale con quello del giro migliore **nello stesso punto della pista**: verde se sei in anticipo, rosso se sei in ritardo. |
+| **Delta live** | Durante ogni giro lo schermo salva il tempo ogni 12,5 m di strada percorsa (GT7) o ogni 1/2048 di giro (AC, che fornisce la frazione del giro). Il delta confronta il tempo attuale con quello del giro migliore **nello stesso punto della pista**: verde se sei in anticipo, rosso se sei in ritardo. Mostra `--` finché lo schermo non ha un giro intero da usare come riferimento (registrato in sessione o salvato per il circuito): su una pista nuova compare quindi dal giro dopo il primo giro lanciato. |
 | **Settori** | La pista è divisa in tre parti uguali. Ogni settore diventa **viola** se è il migliore della sessione, **verde** se è più veloce dello stesso settore del giro migliore, **giallo** se è più lento. Il **giro ideale** è la somma dei tre settori migliori. |
 | **Mappa** | Al primo passaggio sul traguardo lo schermo comincia a registrare le coordinate dell'auto. Il tracciato compare mentre guidi e si chiude al passaggio successivo. Le coordinate X e Z dei giochi danno una mappa con lo stesso orientamento di quella del gioco. |
 | **Forze G** | Laterale: velocità × rapidità di sterzata della traiettoria. Longitudinale: variazione di velocità. Sul cerchio il punto si muove come la forza che senti: in alto in frenata, a sinistra in una curva a destra. |
@@ -222,10 +222,10 @@ Il coaching dei punti di frenata. In alto il **conto alla rovescia in metri** ve
 | 4 | **Mono**<br><sub>Digitale monocromatico</sub> | <img src="docs/schermate/theme-mono.png" width="230"> | <img src="docs/schermate/theme-mono-frenata.png" width="230"> | <img src="docs/schermate/theme-mono-limitatore.png" width="230"> |
 | 5 | **Pocket**<br><sub>LCD da console portatile a 4 toni</sub> | <img src="docs/schermate/theme-pocket.png" width="230"> | <img src="docs/schermate/theme-pocket-frenata.png" width="230"> | <img src="docs/schermate/theme-pocket-limitatore.png" width="230"> |
 | 6 | **Endurance**<br><sub>Gare di durata: gomme, carburante, giri</sub> | <img src="docs/schermate/theme-endurance.png" width="230"> | <img src="docs/schermate/theme-endurance-frenata.png" width="230"> | <img src="docs/schermate/theme-endurance-limitatore.png" width="230"> |
-| 7 | **Ferrari**<br><sub>Marcia su pannello giallo, 15 LED, freno/gas, turbo e benzina</sub> | <img src="docs/schermate/theme-ferrari.png" width="230"> | <img src="docs/schermate/theme-ferrari-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-limitatore.png" width="230"> |
-| 8 | **Ferrari AC**<br><sub>Per Assetto Corsa: frizione, avanzamento giro, spia PIT</sub> | <img src="docs/schermate/theme-ferrari-ac.png" width="230"> | <img src="docs/schermate/theme-ferrari-ac-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-ac-limitatore.png" width="230"> |
-| 9 | **Ferrari Gold**<br><sub>Come Ferrari, con la marcia consigliata nell'angolo del pannello</sub> | <img src="docs/schermate/theme-ferrari-gold.png" width="230"> | <img src="docs/schermate/theme-ferrari-gold-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-gold-limitatore.png" width="230"> |
-| 10 | **BMW M**<br><sub>Pannello blu con le strisce M, orologio, marcia consigliata</sub> | <img src="docs/schermate/theme-bmw-m.png" width="230"> | <img src="docs/schermate/theme-bmw-m-frenata.png" width="230"> | <img src="docs/schermate/theme-bmw-m-limitatore.png" width="230"> |
+| 7 | **Ferrari**<br><sub>Marcia su pannello giallo, 15 LED, freno/gas, turbo, benzina e delta</sub> | <img src="docs/schermate/theme-ferrari.png" width="230"> | <img src="docs/schermate/theme-ferrari-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-limitatore.png" width="230"> |
+| 8 | **Ferrari AC**<br><sub>Per Assetto Corsa: frizione, avanzamento giro, spia PIT, delta</sub> | <img src="docs/schermate/theme-ferrari-ac.png" width="230"> | <img src="docs/schermate/theme-ferrari-ac-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-ac-limitatore.png" width="230"> |
+| 9 | **Ferrari Gold**<br><sub>Come Ferrari (delta compreso), con la marcia consigliata nell'angolo del pannello</sub> | <img src="docs/schermate/theme-ferrari-gold.png" width="230"> | <img src="docs/schermate/theme-ferrari-gold-frenata.png" width="230"> | <img src="docs/schermate/theme-ferrari-gold-limitatore.png" width="230"> |
+| 10 | **BMW M**<br><sub>Pannello blu con le strisce M, orologio, marcia consigliata, delta</sub> | <img src="docs/schermate/theme-bmw-m.png" width="230"> | <img src="docs/schermate/theme-bmw-m-frenata.png" width="230"> | <img src="docs/schermate/theme-bmw-m-limitatore.png" width="230"> |
 
 <sub>Numeri dei temi come nel firmware: 11 Formula, 12 Mappa pista, 13 Telemetria, 14 Prestazioni, 15 Aderenza, 16 Frenata. I temi 7–14 sono stati creati in questo progetto; i temi 0–6 vengono da <a href="https://github.com/caa1211/esp32-gt7-dashboard">esp32-gt7-dashboard</a>.</sub>
 

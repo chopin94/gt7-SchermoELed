@@ -590,6 +590,7 @@
 		drawBmwRevLeds(state, forceUpdate);
 		drawBmwGear(state.gear, forceUpdate, gearSprite, gearSpriteCreated, gearX);
 		drawBmwSpeed(state.speed, forceUpdate, speedSprite, speedSpriteCreated);
+		drawCockpitDelta(state.sessionBestLiveDeltaSeconds, forceUpdate);
 		drawBmwPedalBars(state, forceUpdate);
 	}
 
