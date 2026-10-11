@@ -191,7 +191,8 @@ public:
         detectEvents(p);
     }
 
-    bool live(uint32_t nowMs) const { return hasPacket && nowMs - lastPacketMs <= 1000; }
+    // Un buco di un paio di secondi (Wi-Fi) non spegne il tema di gara.
+    bool live(uint32_t nowMs) const { return hasPacket && nowMs - lastPacketMs <= 2500; }
     // On track, not paused: the race themes are on. The same rule as before.
     bool racing(uint32_t nowMs) const
     {

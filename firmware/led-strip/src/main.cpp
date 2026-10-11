@@ -428,6 +428,9 @@ void setup()
         delay(3000);
         ESP.restart();
     }
+    // Senza risparmio energetico: con il modem che dorme i pacchetti di GT7
+    // arrivano a gruppi e in ritardo, e la striscia sembra scollegata.
+    WiFi.setSleep(false);
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
 
@@ -534,7 +537,9 @@ void loop()
     // pacchetti (meno di 2 s) senza heartbeat: uno al secondo, come fa lo
     // schermo, altrimenti la striscia si ferma a scatti quando lo schermo è spento.
     static unsigned long lastHeartbeat = 0;
-    if (millis() - lastHeartbeat > 1000)
+    // Se i pacchetti si fermano, l'heartbeat parte subito.
+    const bool quiet = race.everReceived() && millis() - race.lastPacketTime() > 300;
+    if (millis() - lastHeartbeat > (quiet ? 250u : 1000u))
     {
         gt7Telem.sendHeartbeat();
         lastHeartbeat = millis();

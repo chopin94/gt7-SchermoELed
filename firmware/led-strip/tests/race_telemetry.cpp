@@ -177,7 +177,7 @@ static void testRace()
     p.flags |= Race::FLAG_PAUSED;
     race.update(p, sim.nowMs + 20);
     CHECK(!race.racing(sim.nowMs + 20) && race.live(sim.nowMs + 20));
-    CHECK(!race.live(sim.nowMs + 2000));
+    CHECK(race.live(sim.nowMs + 2000) && !race.live(sim.nowMs + 3000));
 
     // Reset of the session.
     race.resetSession();
