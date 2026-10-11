@@ -530,9 +530,11 @@ void loop()
         }
     }
 
-    // Heartbeat periodico verso la PS5
+    // Heartbeat verso la PS5. GT7 smette di trasmettere dopo un centinaio di
+    // pacchetti (meno di 2 s) senza heartbeat: uno al secondo, come fa lo
+    // schermo, altrimenti la striscia si ferma a scatti quando lo schermo è spento.
     static unsigned long lastHeartbeat = 0;
-    if (millis() - lastHeartbeat > 10000)
+    if (millis() - lastHeartbeat > 1000)
     {
         gt7Telem.sendHeartbeat();
         lastHeartbeat = millis();
