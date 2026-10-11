@@ -99,6 +99,9 @@ class Telemetry
 public:
     LapAnalysis::Analyzer lap;
     GripAnalysis::Analyzer grip;
+    // The analyses cost time on the ESP32-S2 (no floating point unit): main.cpp
+    // switches them off when no theme or alert uses them.
+    bool lapAnalysisOn = true, gripAnalysisOn = true;
 
     Telemetry() { fuel.reset(); }
 
@@ -166,7 +169,7 @@ public:
         s.brake = p.brake / 255.0f;
         s.fuelFraction = iceFuel && p.fuelCapacity > 0.0f ? p.fuelLevel / p.fuelCapacity : NAN;
         s.fuelLaps = fuel.lapsLeft() >= 0.0f ? fuel.lapsLeft() : NAN;
-        lap.update(s);
+        if (lapAnalysisOn) lap.update(s);
 
         GripAnalysis::Sample g;
         g.timeMs = s.timeMs;
@@ -185,10 +188,13 @@ public:
         g.lateralG = lap.lateralG();
         g.longitudinalG = lap.longitudinalG();
         g.lapCount = p.lapCount;
-        grip.update(g);
+        if (gripAnalysisOn) grip.update(g);
 
-        serviceTrackStore(nowMs);
-        detectEvents(p);
+        if (lapAnalysisOn)
+        {
+            serviceTrackStore(nowMs);
+            detectEvents(p);
+        }
     }
 
     // Un buco di un paio di secondi (Wi-Fi) non spegne il tema di gara.
@@ -220,18 +226,18 @@ public:
         in.brake = p.brake / 255.0f;
         in.gear = p.gear == 15 ? 0 : p.gear;
         in.suggestedGear = p.suggestedGear >= 1 && p.suggestedGear <= 9 ? p.suggestedGear : -1;
-        in.hasDelta = lap.hasLiveDelta();
+        in.hasDelta = lapAnalysisOn && lap.hasLiveDelta();
         in.deltaS = lap.liveDeltaMs() / 1000.0f;
         in.lateralG = lap.lateralG();
         in.longitudinalG = lap.longitudinalG();
         for (int w = 0; w < 4; ++w)
         {
             in.tyreTemp[w] = p.tyreTemp[w];
-            in.wheel[w] = static_cast<uint8_t>(grip.state(w));
+            in.wheel[w] = gripAnalysisOn ? static_cast<uint8_t>(grip.state(w)) : 0;
         }
         in.timeOfDayH = timeOfDay();
         float meters = 0, kmh = 0;
-        in.hasBrakePoint = lap.nextBrakePoint(meters, kmh);
+        in.hasBrakePoint = lapAnalysisOn && lap.nextBrakePoint(meters, kmh);
         in.brakePointM = meters;
     }
 

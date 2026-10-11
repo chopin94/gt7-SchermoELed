@@ -10,7 +10,6 @@
 #include <Preferences.h>
 #include "LedEffects.h"
 #include "RaceTelemetry.h"
-#include "EventStream.h"
 #include "WebPage.h"
 // Circuiti salvati: lo stesso codice dello schermo (firmware/dashboard/src)
 #include "../../dashboard/src/LittleFsStorage.h"
@@ -57,7 +56,6 @@ int32_t lastPacketId = -1;
 // ==================== WEB SERVER & UDP ====================
 OtaWebServer server(80);
 OtaWebUpdate *firmwareUpdate = nullptr;
-EventStream stream;
 WiFiUDP ledDiscoveryUdp;
 // Dopo l'esito di un aggiornamento la striscia lo mostra per un momento.
 bool ledHold = false;
@@ -178,7 +176,6 @@ void handleApiStatus()
     j.field("heap", static_cast<long long>(ESP.getFreeHeap()));
     j.field("psram", static_cast<long long>(ESP.getFreePsram()));
     j.field("tracks", static_cast<long long>(trackFilesReady ? trackStore.trackCount() : -1));
-    j.field("clients", static_cast<long long>(stream.count()));
     j.endObject();
     sendJson(j);
 }
@@ -263,28 +260,11 @@ void handleApiTest()
     server.send(200, "text/plain", "OK");
 }
 
-void handleApiSession()
-{
-    const size_t capacity = 16384; // mappa (fino a 512 punti), giri, frenate
-    char *buffer = static_cast<char *>(malloc(capacity));
-    if (!buffer)
-    {
-        server.send(503, "text/plain", "Memoria esaurita");
-        return;
-    }
-    JsonOut j(buffer, capacity);
-    race.writeSession(j);
-    sendJson(j);
-    free(buffer);
-}
-
 void handleApiReset()
 {
     race.resetSession();
     server.send(200, "text/plain", "OK");
 }
-
-void handleEvents() { stream.accept(server); }
 
 void handleRestart()
 {
@@ -371,13 +351,15 @@ static void copyPacket(const PacketC &d, uint8_t gear, uint8_t suggested, Race::
 
 // Legge tutti i pacchetti arrivati: l'analisi del giro li vuole tutti, anche
 // quando una richiesta web ha fermato il ciclo per qualche decina di ms.
-static void readTelemetry()
+static bool readTelemetry()
 {
+    bool fresh = false;
     for (int k = 0; k < 8; ++k)
     {
         const Packet packet = gt7Telem.readData();
         const PacketC &d = packet.packetContent;
-        if (d.magic != 0x47375330 || d.packetId == lastPacketId) return;
+        if (d.magic != 0x47375330 || d.packetId == lastPacketId) return fresh;
+        fresh = true;
         lastPacketId = d.packetId;
         Race::Packet p;
         copyPacket(d, gt7Telem.getCurrentGearFromByte(), gt7Telem.getSuggestedGearFromByte(), p);
@@ -385,6 +367,7 @@ static void readTelemetry()
         LedFx::Event event;
         while (race.takeEvent(event)) effects.trigger(event, millis());
     }
+    return fresh;
 }
 
 // ==================== SETUP ====================
@@ -445,9 +428,7 @@ void setup()
     server.on("/api/settings", handleApiSettings);
     server.on("/api/theme", handleApiTheme);
     server.on("/api/test", handleApiTest);
-    server.on("/api/session", handleApiSession);
     server.on("/api/reset", handleApiReset);
-    server.on("/api/events", handleEvents);
     server.on("/restart", handleRestart);
     const OtaWebUpdate::Config update = {"GT7 LED", LED_FIRMWARE_TAG, LED_FIRMWARE_VERSION, GT7_OTA_PASSWORD};
     firmwareUpdate = OtaWebUpdate::attach(server, update, showFirmwareUpdate);
@@ -482,12 +463,20 @@ void loop()
         lastDiscoveryBcast = millis();
     }
 
-    readTelemetry();
+    // L'analisi del giro gira solo se un tema o un avviso la usa: con i temi
+    // classici la striscia lavora come prima.
+    const LedFx::Settings &fx = effects.settings;
+    race.lapAnalysisOn = fx.theme == LedFx::THEME_DELTA || fx.theme == LedFx::THEME_G_FORCE ||
+                         (fx.alerts & (LedFx::ALERT_BEST_LAP | LedFx::ALERT_SECTORS | LedFx::ALERT_BRAKING |
+                                       LedFx::ALERT_FUEL | LedFx::ALERT_FLAGS));
+    race.gripAnalysisOn = fx.theme == LedFx::THEME_TYRES || (fx.alerts & LedFx::ALERT_GRIP);
+    const bool fresh = readTelemetry();
     const uint32_t now = millis();
 
-    // Un fotogramma ogni 12 ms al massimo (la striscia ne impiega circa 5 a riceverlo)
+    // Un fotogramma appena arriva un pacchetto (subito, come prima), altrimenti
+    // ogni 16 ms per le animazioni
     static uint32_t lastFrame = 0;
-    if (now - lastFrame >= 12)
+    if (fresh || now - lastFrame >= 16)
     {
         lastFrame = now;
         LedFx::Input input;
@@ -500,37 +489,6 @@ void loop()
         for (int i = 0; i < activeLeds; ++i)
             leds[i] = sleeping ? CRGB::Black : CRGB(frame[i].r, frame[i].g, frame[i].b);
         FastLED.show();
-    }
-
-    // Telemetria in diretta per la pagina web: 20 volte al secondo, i colori 5
-    if (stream.count() > 0)
-    {
-        static uint32_t lastStream = 0, lastColors = 0;
-        static char buffer[1600];
-        if (now - lastStream >= 50)
-        {
-            lastStream = now;
-            JsonOut j(buffer, sizeof(buffer));
-            race.writeFrame(j, now);
-            if (j.ok()) stream.send("t", j.c_str(), j.length());
-        }
-        if (now - lastColors >= 200)
-        {
-            lastColors = now;
-            static const char hex[] = "0123456789abcdef";
-            int n = 0;
-            for (int i = 0; i < activeLeds && n + 6 < static_cast<int>(sizeof(buffer)); ++i)
-            {
-                const uint8_t c[3] = {frame[i].r, frame[i].g, frame[i].b};
-                for (int k = 0; k < 3; ++k)
-                {
-                    buffer[n++] = hex[c[k] >> 4];
-                    buffer[n++] = hex[c[k] & 15];
-                }
-            }
-            buffer[n] = 0;
-            stream.send("leds", buffer, n);
-        }
     }
 
     // Heartbeat verso la PS5. GT7 smette di trasmettere dopo un centinaio di
