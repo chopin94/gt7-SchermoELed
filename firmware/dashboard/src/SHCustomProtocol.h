@@ -775,9 +775,11 @@ public:
     int ledMaxCurrentMA = 500;
     uint32_t lastLedSliderDraw = 0;
 
-    // Stessi indici di enum Theme / IdleMode in firmware/led-strip/src/main.cpp
-    static constexpr int LED_THEME_COUNT = 6;
-    static constexpr int LED_IDLE_MODE_COUNT = 4;
+    // Stessi indici di enum Theme / IdleMode in firmware/led-strip/src/LedEffects.h.
+    // Quanti sono lo dice la striscia in /api/status ("themes", "idleModes"):
+    // una striscia con il firmware precedente ne ha 6 e 4.
+    int ledThemeCount = 6;
+    int ledIdleModeCount = 4;
     static constexpr int LED_IDLE_SOLID = 1;
 
     String getThemeName(int index) {
@@ -788,7 +790,14 @@ public:
             case 3: return "SMOOTH FADE";
             case 4: return "F1 REVERSE";
             case 5: return "DEFAULT REV";
-            default: return "UNKNOWN";
+            case 6: return "DELTA";
+            case 7: return "PEDALI";
+            case 8: return "VELOCITA'";
+            case 9: return "FORZE G";
+            case 10: return "GOMME";
+            case 11: return "AMBIENTE";
+            case 12: return "SOLO AVVISI";
+            default: return "TEMA " + String(index);
         }
     }
 
@@ -798,7 +807,11 @@ public:
             case 1: return "COLORE FISSO";
             case 2: return "RESPIRO";
             case 3: return "ARCOBALENO";
-            default: return "UNKNOWN";
+            case 4: return "ONDA";
+            case 5: return "FUOCO";
+            case 6: return "AURORA";
+            case 7: return "LUCE TV";
+            default: return "MODO " + String(index);
         }
     }
 
@@ -829,6 +842,8 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
             ledGurgle = extractIntFromJson(payload, "gurgle", ledGurgle);
             ledActiveCount = extractIntFromJson(payload, "leds", ledActiveCount);
             ledMaxCurrentMA = extractIntFromJson(payload, "maxMa", ledMaxCurrentMA);
+            ledThemeCount = constrain(extractIntFromJson(payload, "themes", 6), 1, 32);
+            ledIdleModeCount = constrain(extractIntFromJson(payload, "idleModes", 4), 1, 32);
             const int idleColor = extractIntFromJson(payload, "idleColor", -1);
             if (idleColor >= 0) {
                 char hex[7];
@@ -2962,10 +2977,10 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
                     ledBrightness = 0; 
                 }
                 else if (button == 2) {
-                    ledTheme = (ledTheme + 1) % LED_THEME_COUNT;
+                    ledTheme = (ledTheme + 1) % ledThemeCount;
                 }
                 else if (button == 5) {
-                    ledIdleMode = (ledIdleMode + 1) % LED_IDLE_MODE_COUNT;
+                    ledIdleMode = (ledIdleMode + 1) % ledIdleModeCount;
                 }
                 else if (button == 3 || button == 6) {
                     updateLedSliderFromTouch(button);
