@@ -2,14 +2,15 @@
 
 # 🏁 GT7 Schermo e LED
 
-**Cruscotto da 320×240 e striscia LED shift light per Gran Turismo 7 e Assetto Corsa**<br>
+**Cruscotto da 320×240 e striscia LED dietro la TV per Gran Turismo 7 e Assetto Corsa**<br>
 Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 
 ![ESP32](https://img.shields.io/badge/ESP32-2432S024C%20%2F%202432S028-E7352C?logo=espressif&logoColor=white)
 ![ESP32-S2](https://img.shields.io/badge/ESP32--S2-mini%20%2B%20WS2812B-E7352C?logo=espressif&logoColor=white)
 ![PlatformIO](https://img.shields.io/badge/PlatformIO-Arduino-F5822A?logo=platformio&logoColor=white)
 ![Temi](https://img.shields.io/badge/temi%20schermo-17-FFCC00)
-![Temi LED](https://img.shields.io/badge/temi%20LED-6-22C55E)
+![Temi LED](https://img.shields.io/badge/temi%20LED-13-22C55E)
+![Telemetria web](https://img.shields.io/badge/telemetria-web%20live-E10600)
 ![Delta live](https://img.shields.io/badge/delta-live-B030FF)
 ![Circuiti salvati](https://img.shields.io/badge/circuiti-salvati%20in%20flash-0EA5E9)
 
@@ -32,7 +33,8 @@ Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 - [Notifiche](#notifiche)
 - [Schermata di attesa](#schermata-di-attesa)
 - [Menu e impostazioni](#menu-e-impostazioni)
-- [Striscia LED](#striscia-led)
+- [Striscia LED dietro la TV](#striscia-led-dietro-la-tv)
+- [Telemetria web della striscia](#telemetria-web-della-striscia)
 - [Comunicazione tra schermo e LED](#comunicazione-tra-schermo-e-led)
 - [Compilare e caricare i firmware](#compilare-e-caricare-i-firmware)
 - [Aggiornamento via Wi-Fi della striscia LED](#aggiornamento-via-wi-fi-della-striscia-led)
@@ -53,6 +55,7 @@ flowchart LR
     PC["💻 PC + SimHub"]
     DASH["📟 Schermo 320×240<br/>ESP32-2432S024C"]
     LED["🚥 Striscia LED WS2812B<br/>ESP32-S2 mini"]
+    WEB["📱 Telefono / PC<br/>telemetria web"]
 
     PS5 -- "UDP 33739/33740<br/>telemetria cifrata Salsa20" --> DASH
     PS5 -- "UDP 33739/33740" --> LED
@@ -60,12 +63,14 @@ flowchart LR
     PC -- "USB seriale<br/>Custom Protocol DSH1" --> DASH
     LED -- "UDP 33741 broadcast<br/>annuncio GT7LED" --> DASH
     DASH -- "HTTP /api/settings<br/>/api/theme" --> LED
+    LED -- "HTTP + flusso SSE 20 Hz<br/>/api/events" --> WEB
 ```
 
 - Lo **schermo** e la **striscia LED** si collegano alla stessa rete Wi-Fi della console e ricevono la telemetria di GT7 direttamente, ognuno per conto suo.
 - La striscia si annuncia in rete ogni 2 secondi. Lo schermo la trova da solo e diventa il suo **telecomando**: tema, luminosità, colore e animazione di riposo si cambiano dal touch, senza aprire la pagina web.
 - In alternativa a GT7 lo schermo legge **Assetto Corsa** in Wi-Fi, oppure qualsiasi gioco PC tramite **SimHub** via USB.
-- Dai dati grezzi del gioco lo schermo calcola da solo **delta live, settori, mappa del circuito, forze G, tempi di accelerazione, punti di frenata e slittamento delle ruote** ([come](#analisi-del-giro-delta-live-settori-mappa-frenate)) e si ricorda dei circuiti già guidati ([come](#circuiti-salvati)).
+- La striscia ha una **pagina web di telemetria in tempo reale** (contagiri, delta, settori, mappa, forze G, tracce, gomme, giri, esportazione CSV) da aprire sul telefono o sul PC ([come](#telemetria-web-della-striscia)).
+- Dai dati grezzi del gioco lo schermo (e anche la striscia, con lo stesso codice) calcola da solo **delta live, settori, mappa del circuito, forze G, tempi di accelerazione, punti di frenata e slittamento delle ruote** ([come](#analisi-del-giro-delta-live-settori-mappa-frenate)) e si ricorda dei circuiti già guidati ([come](#circuiti-salvati)).
 
 ## Hardware
 
@@ -74,7 +79,7 @@ flowchart LR
 | Schermo | **ESP32-2432S024C** (2.4″ ILI9341, touch capacitivo CST820) | scheda in uso, ambiente `esp32-2432s024c`; flash da 4 MB: firmware da 3 MB e 896 KB di filesystem per i circuiti salvati |
 | Schermo, alternativa | ESP32-2432S028 (2.8″ ILI9341 o ST7789, touch resistivo) | ambienti `esp32` e `esp32-st7789` |
 | Controller LED | **LOLIN / Wemos ESP32-S2 mini** | dati LED sul **GPIO 7** |
-| LED | Striscia **WS2812B** (fino a 200 LED, 143 di default) | alimentazione 5 V, limite corrente regolabile |
+| LED | Striscia **WS2812B** (fino a 200 LED, 143 di default) dietro la TV su tre lati: destro, alto, sinistro | alimentazione 5 V, limite corrente regolabile |
 
 ## Funzioni
 
@@ -105,9 +110,12 @@ flowchart LR
 
 **Striscia LED**
 
-- 6 temi shift light, effetto "gorgoglio" alla punta, lampeggio rosso al limitatore (flag ufficiale di GT7)
-- 4 animazioni a gioco fermo o in pausa: spento, colore fisso, respiro, arcobaleno
-- Pagina web di configurazione con telemetria live
+- 📺 **Montaggio dietro la TV** a U rovesciata: parte in basso a destra, sale, attraversa il lato alto e scende a sinistra (o il contrario), nessun LED sul lato basso; LED per lato configurabili con una **prova di montaggio**
+- 🚥 **13 temi in gara**: i 6 classici invariati più **Delta**, **Pedali**, **Velocità**, **Forze G**, **Gomme**, **Ambiente** e **Solo avvisi**
+- 🔔 **8 avvisi** sopra ogni tema, ognuno attivabile: limitatore, giro migliore, settori, punti di frenata, riserva, bloccaggi e pattinamenti, ultimo giro e arrivo, marcia consigliata
+- ⏱️ **Analisi del giro a bordo**: delta live, settori, punti di frenata, aderenza e consumo calcolati dalla striscia stessa con lo stesso codice dello schermo, e **circuiti salvati** in flash
+- 💤 **8 animazioni a gioco fermo**: spento, colore fisso, respiro, arcobaleno, onda, fuoco, aurora, luce TV; spegnimento automatico dopo N minuti senza GT7
+- 📱 **Telemetria web pro** in tempo reale, anteprima dal vivo della striscia, giri ed esportazione CSV
 - Impostazioni salvate in memoria, configurazione Wi-Fi con WiFiManager
 - Aggiornamento del firmware via Wi-Fi dalla sua pagina web, con l'avanzamento mostrato sui LED ([come](#aggiornamento-via-wi-fi-della-striscia-led))
 
@@ -282,35 +290,92 @@ Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude
 
 ---
 
-## Striscia LED
+## Striscia LED dietro la TV
 
-### Temi
+<sub>Le immagini sono generate dal vero codice degli effetti ([`LedEffects.h`](firmware/led-strip/src/LedEffects.h)) durante una gara simulata: la striscia è disegnata come bagliore sul muro dietro una TV.</sub>
 
-| # | Tema | Effetto |
-| :-: | --- | --- |
-| 0 | **Default** | Si riempie da sinistra: verde fino al 60%, giallo fino all'85%, poi rosso |
-| 5 | **Default Reverse** | Come Default, da destra a sinistra |
-| 1 | **F1 Center** | Dal centro verso i bordi, simmetrico, verde/giallo/rosso |
-| 4 | **F1 Reverse** | Dai bordi verso il centro |
-| 2 | **Supercar** | Si accende solo sopra il 70% dei giri, tutta blu |
-| 3 | **Smooth Fade** | Tutta la striscia sfuma da azzurro ghiaccio a rosso |
+### Montaggio
 
-Con il **limitatore** attivo (flag di GT7) tutti i temi lampeggiano in rosso. Il **gorgoglio** fa tremolare gli ultimi LED accesi, con intensità regolabile (0 = spento).
+La striscia corre dietro la TV su tre lati, **senza LED sul lato basso**: parte in basso a destra, sale lungo il lato destro, attraversa il lato alto da destra a sinistra e scende lungo il lato sinistro. Nella pagina web (*Striscia LED → Montaggio*) si scrive quanti LED ci sono su ogni lato; senza valori salvati la striscia usa le proporzioni di una TV 16:9 (con 143 LED: 38 + 67 + 38). *Parte in basso a sinistra* inverte il giro; con 0 LED su entrambi i lati la striscia torna una barra dritta e i temi usano i suoi quarti esterni come lati.
+
+**Prova montaggio**: per 15 secondi il lato destro è rosso, quello alto verde, il sinistro blu e il primo LED lampeggia bianco. Se un colore sconfina sul lato vicino, basta correggere i numeri: ogni modifica vale subito, *Salva* la tiene dopo il riavvio.
+
+<img src="docs/schermate/led-prova-montaggio.png" width="320">
+
+### Temi in gara
+
+I primi sei sono quelli di prima, **identici al LED** (un test li confronta con il vecchio codice). I sette nuovi usano la forma della striscia: i lati, il lato alto, gli angoli.
+
+| # | Tema | Cosa mostra | |
+| :-: | --- | --- | :-: |
+| 0 | **Default** | Si riempie lungo la striscia: verde fino al 60%, giallo fino all'85%, poi rosso | <img src="docs/schermate/led-tema-default.png" width="220"> |
+| 5 | **Default Rev** | Come Default, dall'altro capo | <img src="docs/schermate/led-tema-default-rev.png" width="220"> |
+| 1 | **F1 Center** | Dal centro della striscia (in alto) verso i due capi | <img src="docs/schermate/led-tema-f1-center.png" width="220"> |
+| 4 | **F1 Reverse** | Dai due capi in basso fino al centro in alto: i lati "si riempiono" insieme | <img src="docs/schermate/led-tema-f1-reverse.png" width="220"> |
+| 2 | **Supercar** | Tutta blu, solo sopra il 70% dei giri | <img src="docs/schermate/led-tema-supercar.png" width="220"> |
+| 3 | **Smooth Fade** | Tutta la striscia sfuma da azzurro ghiaccio a rosso | <img src="docs/schermate/led-tema-smooth-fade.png" width="220"> |
+| 6 | **Delta** 🆕 | I **lati** dicono come va il giro rispetto al migliore: **verdi in anticipo, rossi in ritardo**, alti quanto il delta (pieni a 1 s, scala regolabile). Sul **lato alto** i giri motore dal centro verso gli angoli. Senza giro di riferimento i lati respirano in blu in basso | <img src="docs/schermate/led-tema-delta.png" width="220"><br><img src="docs/schermate/led-tema-delta-ritardo.png" width="220"> |
+| 7 | **Pedali** 🆕 | **Gas** sul lato destro (verde), **freno** sul sinistro (rosso), come i pedali; giri in alto | <img src="docs/schermate/led-tema-pedali.png" width="220"> |
+| 8 | **Velocità** 🆕 | Scie di luce escono dal centro in alto e scendono lungo i lati, come il paesaggio che scorre: più veloci e fitte con la velocità, colore dei giri | <img src="docs/schermate/led-tema-velocita.png" width="220"> |
+| 9 | **Forze G** 🆕 | La luce va dove la forza spinge il corpo: **a sinistra in una curva a destra**, **in alto in frenata**, in basso sui lati in accelerazione. Da verde a rosso con la parte di aderenza usata | <img src="docs/schermate/led-tema-forze-g.png" width="220"> |
+| 10 | **Gomme** 🆕 | Ogni angolo ha il colore della **temperatura della sua gomma** (anteriori in alto, posteriori in basso): blu fredde, verdi giuste, rosse calde. Una ruota che si blocca o pattina lampeggia sul suo lato | <img src="docs/schermate/led-tema-gomme.png" width="220"> |
+| 11 | **Ambiente** 🆕 | Il **colore del cielo all'ora del giorno della gara**: notte blu, alba, giorno, tramonto arancione. Ottimo per le 24 ore | <img src="docs/schermate/led-tema-ambiente.png" width="220"> |
+| 12 | **Solo avvisi** 🆕 | Luce fissa e tenue del colore di riposo: si accendono solo gli avvisi. Per chi vuole la luce d'ambiente senza distrazioni | <img src="docs/schermate/led-tema-solo-avvisi.png" width="220"> |
+
+Il **gorgoglio** fa tremolare la punta delle barre (temi classici e la barra dei giri in alto), con intensità regolabile (0 = spento). I giri sul lato alto usano lo stesso intervallo delle shift light dello schermo: da 25 punti sotto l'avviso di GT7 al massimo.
+
+### Avvisi
+
+Si disegnano sopra qualsiasi tema e si attivano uno per uno (pagina web → *Avvisi*). Di fabbrica sono accesi limitatore, giro migliore, settori, riserva, ultimo giro e arrivo.
+
+| Avviso | Effetto | |
+| --- | --- | :-: |
+| **Limitatore** | Tutta la striscia lampeggia rossa (flag ufficiale di GT7), come prima | <img src="docs/schermate/led-avviso-limitatore.png" width="200"> |
+| **Giro migliore** | Tre impulsi viola su tutta la striscia | <img src="docs/schermate/led-avviso-giro-migliore.png" width="200"> |
+| **Settori** | Alla fine di ogni settore il lato alto prende il suo colore per un secondo: viola miglior tempo, verde meglio del giro migliore, giallo più lento | <img src="docs/schermate/led-avviso-settore.png" width="200"> |
+| **Punti di frenata** | Da 150 m prima del punto dove il giro migliore ha frenato, i lati si accendono dall'alto verso il basso: bianco, arancione da 100 m, rosso da 50 m. Si spegne appena premi il freno | <img src="docs/schermate/led-avviso-frenata.png" width="200"> |
+| **Riserva** | Tre impulsi arancioni nella metà bassa dei lati quando il carburante basta per meno di 1,5 giri | <img src="docs/schermate/led-avviso-riserva.png" width="200"> |
+| **Bloccaggi e pattinamenti** | Rosso (bloccaggio) o arancione (pattinamento) sulla metà del lato della ruota: anteriori in alto, posteriori in basso | <img src="docs/schermate/led-avviso-bloccaggio.png" width="200"> |
+| **Ultimo giro e arrivo** | Tre lampi bianchi all'inizio dell'ultimo giro, bandiera a scacchi che sventola all'arrivo | <img src="docs/schermate/led-avviso-arrivo.png" width="200"> |
+| **Marcia consigliata** | Angoli alti azzurri lampeggianti quando GT7 consiglia una marcia più bassa di quella inserita | |
 
 ### Animazioni a gioco fermo
 
-| Modo | Effetto |
-| --- | --- |
-| Spento | Nessuna luce |
-| Colore fisso | Colore scelto, a luminosità piena |
-| Respiro | Il colore scelto pulsa lentamente |
-| Arcobaleno | Arcobaleno che scorre |
+| Modo | Effetto | |
+| --- | --- | :-: |
+| Spento | Nessuna luce | |
+| Colore fisso | Colore scelto | <img src="docs/schermate/led-riposo-colore-fisso.png" width="200"> |
+| Respiro | Il colore scelto pulsa lentamente | <img src="docs/schermate/led-riposo-respiro.png" width="200"> |
+| Arcobaleno | Arcobaleno che scorre | <img src="docs/schermate/led-riposo-arcobaleno.png" width="200"> |
+| **Onda** 🆕 | Due comete del colore scelto salgono dai capi e si incontrano in alto | <img src="docs/schermate/led-riposo-onda.png" width="200"> |
+| **Fuoco** 🆕 | Fiamme che salgono lungo i due lati della TV | <img src="docs/schermate/led-riposo-fuoco.png" width="200"> |
+| **Aurora** 🆕 | Onde lente di verde, azzurro e viola | <img src="docs/schermate/led-riposo-aurora.png" width="200"> |
+| **Luce TV** 🆕 | Bianco fisso: luce d'ambiente per guardare film e TV | <img src="docs/schermate/led-riposo-luce-tv.png" width="200"> |
 
-### Pagina web
+Con **Spegni dopo** (pagina web) la striscia si spegne quando GT7 non trasmette da quei minuti, per esempio a PS5 spenta; torna accesa al primo pacchetto.
 
-All'indirizzo IP della striscia (mostrato sul monitor seriale) c'è la pagina di configurazione con telemetria in tempo reale; in fondo, *Aggiorna firmware via Wi-Fi* apre la [pagina di aggiornamento](#aggiornamento-via-wi-fi-della-striscia-led). Al primo avvio la striscia crea la rete Wi-Fi **`GT7_LED_Config`** per inserire la password di casa.
+### Analisi del giro sulla striscia
 
-<img src="docs/schermate/led-web.png" alt="Pagina web della striscia LED" width="360">
+La striscia riceve la telemetria di GT7 per conto suo e la passa allo **stesso motore di analisi dello schermo** ([`LapAnalysis.h`](firmware/dashboard/src/LapAnalysis.h), [`GripAnalysis.h`](firmware/dashboard/src/GripAnalysis.h), [`TrackStore.h`](firmware/dashboard/src/TrackStore.h)): delta live, settori, punti di frenata, slittamento delle ruote, consumo per giro. Funziona anche senza lo schermo. Anche lei **salva i circuiti** nella sua flash (la partizione da 1,4 MB che prima non usava): su una pista già guidata delta e frenate ci sono dal primo giro lanciato. Ora chiede a GT7 il pacchetto `C`, come lo schermo, che contiene il tempo del giro in corso.
+
+## Telemetria web della striscia
+
+Apri l'indirizzo della striscia (lo mostra il menu LED dello schermo e il monitor seriale) dal telefono, dal tablet o dal PC. La pagina riceve **20 aggiornamenti al secondo** con un flusso Server-Sent Events, senza ricaricare; non usa file esterni, quindi funziona anche su una rete senza internet.
+
+| Telemetria | Telefono |
+| :-: | :-: |
+| <img src="docs/schermate/led-web.png" width="560"> | <img src="docs/schermate/led-web-telefono.png" width="230"> |
+
+| Giri | Striscia LED |
+| :-: | :-: |
+| <img src="docs/schermate/led-web-giri.png" width="400"> | <img src="docs/schermate/led-web-led.png" width="400"> |
+
+- **Telemetria**: marcia (e marcia consigliata), velocità, giri con shift light, pedali di gas, freno e frizione (in bianco quello davvero applicato dopo ABS e TCS), giro, tempi, giro ideale, **delta live** con barra, **settori** colorati, prossima frenata e risultato dell'ultima, **mappa del circuito** con settori, posizione e punti di frenata, **cerchio delle forze G** con scia, **tracce** degli ultimi 20 s, **confronto con il giro migliore** (velocità lungo il giro e delta), **gomme** con temperatura, slittamento, carico delle sospensioni, bloccaggi e pattinamenti, **carburante** con giri rimasti e consumo per giro, turbo, pressione e temperature, spie ABS, TCS, ASM, freno a mano, limitatore, luci.
+- **Giri**: migliore, ideale, media, velocità massima, picchi di G; tabella dei giri con i settori migliori in viola e il carburante usato; accelerazioni (0-100, 0-200, 100-200, 400 m); **esportazione CSV** dei giri e di tutta la telemetria registrata dal browser; *Azzera sessione e circuito*.
+- **Striscia LED**: **anteprima dal vivo** della striscia attorno alla TV, temi, avvisi, animazione e colore di riposo, luminosità, gorgoglio, scala del delta, limite di corrente, spegnimento automatico, montaggio e prova.
+- **Sistema**: versione, segnale Wi-Fi, memoria, circuiti salvati, aggiornamento firmware, riavvio.
+
+Il flusso non blocca mai i LED: se un telefono non riesce a stare al passo salta dei fotogrammi e dopo 5 s viene chiuso (il browser si ricollega da solo). Fino a 4 pagine aperte insieme. Al primo avvio la striscia crea la rete Wi-Fi **`GT7_LED_Config`** per inserire la password di casa.
 
 ---
 
@@ -319,13 +384,16 @@ All'indirizzo IP della striscia (mostrato sul monitor seriale) c'è la pagina di
 | Direzione | Canale | Contenuto |
 | --- | --- | --- |
 | LED → rete | UDP broadcast, porta **33741**, ogni 2 s | `GT7LED\|<ip della striscia>` |
-| Schermo → LED | `GET http://<ip>/api/status` | Stato JSON: `rpm`, `gear`, `brightness`, `theme`, `idleMode`, `gurgle`, `leds`, `maxMa`, `idleColor`, … |
-| Schermo → LED | `GET http://<ip>/api/settings?b=&l=&g=&ma=&im=&ic=&save=1` | Luminosità, numero LED, gorgoglio, limite mA, animazione di riposo, colore |
-| Schermo → LED | `GET http://<ip>/api/theme?v=<0-5>` | Tema LED |
+| Schermo → LED | `GET http://<ip>/api/status` | Stato JSON: `rpm`, `gear`, `brightness`, `theme`, `idleMode`, `gurgle`, `leds`, `maxMa`, `idleColor`, e dalla versione 2 `themes` e `idleModes` (quanti ne scorre il menu LED), `alerts`, `right`/`top`/`left`, … |
+| Schermo → LED | `GET http://<ip>/api/settings?b=&l=&g=&ma=&im=&ic=&save=1` | Luminosità, numero LED, gorgoglio, limite mA, animazione di riposo, colore. Tutti facoltativi; la pagina web aggiunge `al` (avvisi), `zr`/`zt`/`zl` (LED per lato), `sl` (inizio a sinistra), `ds` (scala delta in decimi di s), `it` (spegnimento in minuti) |
+| Schermo → LED | `GET http://<ip>/api/theme?v=<0-12>` | Tema LED |
+| Browser → LED | `GET /api/events` | Flusso Server-Sent Events: evento `t` (telemetria JSON, 20 al secondo), evento `leds` (colori della striscia in esadecimale, 5 al secondo) |
+| Browser → LED | `GET /api/session` | Giri, settori migliori, mappa, punti di frenata, accelerazioni |
+| Browser → LED | `GET /api/test?layout=1`, `GET /api/reset` | Prova del montaggio; azzera sessione e dati salvati del circuito |
 | Browser → LED | `GET http://<ip>/restart` | Riavvio |
 | Browser → LED | `GET /update`, `POST /update` | [Aggiornamento del firmware via Wi-Fi](#aggiornamento-via-wi-fi-della-striscia-led) |
 
-Gli indici di tema (0–5) e di animazione di riposo (0–3) sono gli stessi nei due firmware: `enum Theme` e `enum IdleMode` in [`firmware/led-strip/src/main.cpp`](firmware/led-strip/src/main.cpp).
+Gli indici di tema (0–12) e di animazione di riposo (0–7) sono gli stessi nei due firmware: `enum Theme` e `enum IdleMode` in [`firmware/led-strip/src/LedEffects.h`](firmware/led-strip/src/LedEffects.h). Lo schermo scorre quanti temi la striscia dichiara in `/api/status`, quindi funziona anche con una striscia non ancora aggiornata (6 temi, 4 animazioni).
 
 ---
 
@@ -429,7 +497,12 @@ I primi tre controlli li fa già il browser, prima di inviare il file; il dispos
 │   │   └── tests/                   Test di protocollo SimHub, analisi del giro, frenate, circuiti salvati, aderenza, aggiornamento della striscia
 │   └── led-strip/                   Striscia LED WS2812B (PlatformIO, ESP32-S2)
 │       ├── platformio.ini
-│       └── src/main.cpp             Temi LED, pagina web, API, discovery
+│       ├── src/main.cpp             Wi-Fi, API, impostazioni, ciclo dei LED
+│       ├── src/LedEffects.h         Geometria a U, temi, avvisi, animazioni (C++ puro)
+│       ├── src/RaceTelemetry.h      Pacchetti GT7 → analisi del giro → LED e JSON (C++ puro)
+│       ├── src/EventStream.h        Flusso Server-Sent Events non bloccante
+│       ├── src/WebPage.h            Pagina di telemetria
+│       └── tests/                   Test degli effetti e della gara simulata
 ├── docs/
 │   ├── schermate/                   Tutte le schermate 320×240 (generate)
 │   ├── SIMHUB.md                    Guida SimHub USB
@@ -450,7 +523,9 @@ Per mappa, delta, settori, forze G, frenate e ruote, [`render.cpp`](tools/screen
 ```bash
 tools/screenshots/build.sh                 # tutte le schermate in docs/schermate/
 python3 tools/screenshots/mosaic.py        # immagine di apertura del README
-node tools/screenshots/led-web.mjs         # pagina web LED (richiede Playwright)
+g++ -std=c++11 -O2 tools/screenshots/led-themes.cpp -lz -o /tmp/led-themes
+/tmp/led-themes docs/schermate /tmp/led-web.json   # anteprime della striscia sulla TV e dati per la pagina web
+node tools/screenshots/led-web.mjs /tmp/led-web.json   # pagina web LED (richiede Playwright)
 node tools/screenshots/update-web.mjs      # pagina di aggiornamento della striscia, verificandone i controlli
 ```
 
@@ -462,13 +537,13 @@ Il codice nuovo è provato da test su PC e dal simulatore, e compila per tutte l
 - **Carico delle sospensioni**: l'unità di `suspHeight` non è documentata. Il verso si impara in frenata, ma la scala (il movimento massimo visto) si assesta dopo qualche giro: nei primi minuti le barre blu possono sembrare esagerate.
 - **Punti di frenata**: le soglie (25% di pedale, 72 km/h, 0,35 s) sono in testa a [`LapAnalysis.h`](firmware/dashboard/src/LapAnalysis.h). Su un circuito con chicane molto vicine due frenate possono fondersi in una (si apre una nuova frenata solo 1,5 s dopo la fine della precedente).
 - **Circuiti salvati**: al primo avvio dopo l'installazione lo schermo formatta il filesystem e l'avvio dura qualche secondo in più (fino a una decina, solo quella volta). Per controllare che salvi, guida due giri e riavvia: al giro lanciato successivo mappa e punti di frenata devono comparire subito.
+- **Striscia LED 2.0**: compilata in CI e provata su PC (effetti, gara simulata, pagina web nel browser), ma non ancora sull'ESP32-S2 reale. Da guardare: che i LED per lato corrispondano (usa *Prova montaggio*), che la pagina web resti fluida con il telefono aperto durante la gara, che delta e frenate compaiano dal secondo giro (o subito su un circuito salvato). L'ESP32-S2 non ha unità di calcolo in virgola mobile: se la striscia sembrasse meno fluida di prima, il tema *Velocità* e le animazioni *Fuoco* e *Aurora* sono i più pesanti.
 - **Forze G**: restano calcolate da velocità e traiettoria. Il pacchetto GT7 contiene anche le accelerazioni (`sway`, `heave`, `surge`) ma senza unità documentate; non le ho usate senza poterle confrontare in gioco.
 
 ## Prossimi passi
 
 Idee già valutate, non ancora fatte:
 
-- **Striscia LED**: modalità delta (verde in anticipo, rosso in ritardo), barra di gas e freno, avviso riserva, lampeggio sulla marcia consigliata, lampo quando si avvicina un punto di frenata.
 - **Sottosterzo e sovrasterzo** dall'angolo di sterzo (`wheelSteeringAngle`) e dall'orientamento della vettura: serve prima verificare in gioco unità e segni.
 - **Pagina web dello schermo** per cambiare tema dal telefono e scaricare i giri salvati.
 - **Pulsanti fisici** sullo schermo (cambio tema, azzera giri): con le mani sul volante il touch non si usa.
