@@ -35,6 +35,7 @@ Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 - [Menu e impostazioni](#menu-e-impostazioni)
 - [Striscia LED dietro la TV](#striscia-led-dietro-la-tv)
 - [Telemetria web della striscia](#telemetria-web-della-striscia)
+- [Cruscotto sul telefono](#cruscotto-sul-telefono)
 - [Comunicazione tra schermo e LED](#comunicazione-tra-schermo-e-led)
 - [Compilare e caricare i firmware](#compilare-e-caricare-i-firmware)
 - [Aggiornamento via Wi-Fi della striscia LED](#aggiornamento-via-wi-fi-della-striscia-led)
@@ -360,7 +361,7 @@ La striscia riceve la telemetria di GT7 per conto suo e la passa allo **stesso m
 
 ## Telemetria web della striscia
 
-Apri l'indirizzo della striscia (lo mostra il menu LED dello schermo e il monitor seriale) dal telefono, dal tablet o dal PC. La pagina riceve **20 aggiornamenti al secondo** con un flusso Server-Sent Events, senza ricaricare; non usa file esterni, quindi funziona anche su una rete senza internet.
+Apri **`http://gt7led.local`** oppure l'indirizzo della striscia (lo mostra il menu LED dello schermo e il monitor seriale) dal telefono, dal tablet o dal PC. La pagina riceve **20 aggiornamenti al secondo** con un flusso Server-Sent Events, senza ricaricare; non usa file esterni, quindi funziona anche su una rete senza internet.
 
 | Telemetria | Telefono |
 | :-: | :-: |
@@ -376,6 +377,30 @@ Apri l'indirizzo della striscia (lo mostra il menu LED dello schermo e il monito
 - **Sistema**: versione, segnale Wi-Fi, memoria, circuiti salvati, aggiornamento firmware, riavvio.
 
 Il flusso non blocca mai i LED: se un telefono non riesce a stare al passo salta dei fotogrammi e dopo 5 s viene chiuso (il browser si ricollega da solo). Fino a 4 pagine aperte insieme. Al primo avvio la striscia crea la rete Wi-Fi **`GT7_LED_Config`** per inserire la password di casa.
+
+## Cruscotto sul telefono
+
+Dalla pagina della striscia il bottone rosso **Cruscotto** (oppure direttamente **`http://gt7led.local/cruscotto`**) apre un cruscotto a tutto schermo per il telefono: sfondo nero puro, che sugli schermi AMOLED si fonde con la barra di stato del telefono (ora, notifiche, batteria), che resta visibile sopra.
+
+| Gara | Delta | Analogico | Ingegnere | Circuito | Essenziale |
+| :-: | :-: | :-: | :-: | :-: | :-: |
+| <img src="docs/schermate/cruscotto-gara-verticale.png" width="130"> | <img src="docs/schermate/cruscotto-delta-verticale.png" width="130"> | <img src="docs/schermate/cruscotto-analogico-verticale.png" width="130"> | <img src="docs/schermate/cruscotto-ingegnere-verticale.png" width="130"> | <img src="docs/schermate/cruscotto-circuito-verticale.png" width="130"> | <img src="docs/schermate/cruscotto-essenziale-verticale.png" width="130"> |
+
+| In orizzontale | |
+| :-: | :-: |
+| <img src="docs/schermate/cruscotto-gara-orizzontale.png" width="400"> | <img src="docs/schermate/cruscotto-delta-orizzontale.png" width="400"> |
+| <img src="docs/schermate/cruscotto-analogico-orizzontale.png" width="400"> | <img src="docs/schermate/cruscotto-ingegnere-orizzontale.png" width="400"> |
+| <img src="docs/schermate/cruscotto-circuito-orizzontale.png" width="400"> | <img src="docs/schermate/cruscotto-essenziale-orizzontale.png" width="400"> |
+
+- **Sei cruscotti**, ognuno con la sua impaginazione verticale e orizzontale: *Gara* (marcia gigante, shift light, velocità, delta, settori, tempi), *Delta* (il delta riempie lo schermo e si colora di verde o di rosso), *Analogico* (contagiri a lancetta, carburante, temperature, turbo), *Ingegnere* (gomme, forze G con scia, pedali prima e dopo ABS e TCS, spie), *Circuito* (mappa con settori, punti di frenata e conto alla rovescia alla prossima staccata), *Essenziale* (shift light, marcia e delta).
+- **Scorri** a destra o a sinistra per cambiare cruscotto, **tocca** per il menu. Verticale e orizzontale si ricordano ognuno il proprio: per esempio *Essenziale* con il telefono in piedi e *Ingegnere* girandolo.
+- **Fluido**: la striscia manda un fotogramma per ogni pacchetto di GT7 (fino a 60 al secondo, flusso `/api/dash` separato da quello della pagina principale) e il telefono disegna alla sua frequenza, interpolando i valori tra un fotogramma e l'altro. Si aggiorna solo ciò che cambia, le barre si muovono con trasformazioni grafiche e le parti fisse di contagiri, mappa e cerchio G si disegnano una volta sola. Come per la pagina principale, un telefono lento salta fotogrammi senza mai rallentare i LED.
+- **Nome invece dell'IP**: la striscia si annuncia in rete come **`gt7led.local`** (mDNS) e si presenta al router come `gt7led`. iPhone, Mac, Windows 10/11 e i telefoni Android recenti lo trovano da soli; se un telefono non risolve `.local`, l'indirizzo numerico è nel menu *Sistema* della pagina principale e sul monitor seriale.
+- **Senza barre del browser**: dal menu del browser scegli *Aggiungi a schermata Home*. Dall'icona il cruscotto si apre come un'app, nero, con solo la barra di stato del telefono sopra. Su iPhone funziona subito. Su Android Chrome apre come app solo le pagine sicure: per averlo anche su `http`, apri `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, aggiungi `http://gt7led.local`, riavvia Chrome e poi aggiungi alla Home. Nel menu c'è anche *Nascondi anche la barra di stato* per il tutto schermo completo.
+- **Lo schermo resta acceso**: al primo tocco il cruscotto chiede al telefono di non spegnere lo schermo (Wake Lock). Sulle pagine `http` i browser non lo permettono, quindi usa un video nero muto in loop, che ha lo stesso effetto. Con l'opzione di Chrome qui sopra funziona il Wake Lock vero.
+- **Senza internet**: font dei numeri (Barlow Condensed, licenza OFL), icone e video sono dentro il firmware ([`DashPage.h`](firmware/led-strip/src/DashPage.h), [`DashAssets.h`](firmware/led-strip/src/DashAssets.h), generato da [`tools/images/cruscotto_assets.py`](tools/images/cruscotto_assets.py)).
+
+Le bozze da cui nascono, con un simulatore nel browser, sono in [`docs/bozze-cruscotto`](docs/bozze-cruscotto/index.html). Per provare il cruscotto vero sul PC con una gara simulata: `node tools/screenshots/cruscotto.mjs --serve` e poi `http://localhost:8080/cruscotto`.
 
 ---
 
@@ -527,6 +552,7 @@ g++ -std=c++11 -O2 tools/screenshots/led-themes.cpp -lz -o /tmp/led-themes
 /tmp/led-themes docs/schermate /tmp/led-web.json   # anteprime della striscia sulla TV e dati per la pagina web
 node tools/screenshots/led-web.mjs /tmp/led-web.json   # pagina web LED (richiede Playwright)
 node tools/screenshots/update-web.mjs      # pagina di aggiornamento della striscia, verificandone i controlli
+node tools/screenshots/cruscotto.mjs       # cruscotto del telefono, 6 cruscotti in verticale e orizzontale
 ```
 
 ## Da verificare in gioco
@@ -538,6 +564,7 @@ Il codice nuovo è provato da test su PC e dal simulatore, e compila per tutte l
 - **Punti di frenata**: le soglie (25% di pedale, 72 km/h, 0,35 s) sono in testa a [`LapAnalysis.h`](firmware/dashboard/src/LapAnalysis.h). Su un circuito con chicane molto vicine due frenate possono fondersi in una (si apre una nuova frenata solo 1,5 s dopo la fine della precedente).
 - **Circuiti salvati**: al primo avvio dopo l'installazione lo schermo formatta il filesystem e l'avvio dura qualche secondo in più (fino a una decina, solo quella volta). Per controllare che salvi, guida due giri e riavvia: al giro lanciato successivo mappa e punti di frenata devono comparire subito.
 - **Striscia LED 2.0**: compilata in CI e provata su PC (effetti, gara simulata, pagina web nel browser), ma non ancora sull'ESP32-S2 reale. Da guardare: che i LED per lato corrispondano (usa *Prova montaggio*), che la pagina web resti fluida con il telefono aperto durante la gara, che delta e frenate compaiano dal secondo giro (o subito su un circuito salvato). L'ESP32-S2 non ha unità di calcolo in virgola mobile: se la striscia sembrasse meno fluida di prima, il tema *Velocità* e le animazioni *Fuoco* e *Aurora* sono i più pesanti.
+- **Cruscotto sul telefono (2.1)**: provato nel browser con la gara simulata, non ancora con GT7 e la striscia vera. Da guardare: che `gt7led.local` si apra dal telefono, che con il cruscotto aperto LED e pagina restino fluidi (il flusso del cruscotto arriva a 60 fotogrammi al secondo; se servisse alleggerirlo, l'intervallo minimo di 14 ms è nel `loop()` di [`main.cpp`](firmware/led-strip/src/main.cpp)), che lo schermo non si spenga dopo il primo tocco, e il verso del cerchio G e delle gomme (anteriore sinistra in alto a sinistra).
 - **Forze G**: restano calcolate da velocità e traiettoria. Il pacchetto GT7 contiene anche le accelerazioni (`sway`, `heave`, `surge`) ma senza unità documentate; non le ho usate senza poterle confrontare in gioco.
 
 ## Prossimi passi

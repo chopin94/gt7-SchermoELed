@@ -23,6 +23,7 @@ header{position:sticky;top:0;z-index:5;background:#0b0c10ee;backdrop-filter:blur
 .pill{white-space:nowrap;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600;background:#23262f;color:var(--dim)}
 .pill.on{background:#0f3d22;color:#5ff59a}.pill.pause{background:#3d330f;color:#ffd75a}
 .sp{flex:1}.small{font-size:12px;color:var(--dim)}
+.dashbtn{white-space:nowrap;padding:6px 12px;border-radius:8px;background:var(--red);color:#fff;font-weight:700;font-size:13px;text-decoration:none}
 @media(max-width:600px){#rate{display:none}.logo{white-space:nowrap}}
 nav{display:flex;gap:4px;padding:0 12px;max-width:1280px;margin:0 auto;overflow-x:auto}
 nav button{background:none;border:0;color:var(--dim);padding:9px 12px;font:inherit;font-weight:600;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
@@ -93,6 +94,7 @@ input[type=color]{width:100%;height:38px;border:0;background:none;padding:0}
   <span class="pill" id="state">In attesa</span>
   <span class="sp"></span>
   <span class="small" id="rate"></span>
+  <a class="dashbtn" href="/cruscotto">Cruscotto</a>
  </div>
  <nav>
   <button data-tab="tel" class="sel">Telemetria</button>
@@ -472,7 +474,7 @@ function drawPreview(){const sv=$('preview');if(!S.right&&S.right!==0)return;
  if(pos.length)h+='<text x="'+pos[0][0]+'" y="'+(pos[0][1]+16)+'" fill="#8b8f9c" font-size="10" text-anchor="middle">inizio</text>';
  sv.innerHTML=h;setText('ledinfo',THEMES[S.theme]?'tema '+THEMES[S.theme][0]+' · '+n+' LED':'')}
 function loadStatus(){api('/api/status').then(r=>r.json()).then(s=>{S=s;showSettings();
- const up=s.uptime|0;$('sysinfo').innerHTML=[['Firmware',s.fw],['Indirizzo',s.ip],['Segnale Wi-Fi',s.rssi+' dBm'],['Acceso da',Math.floor(up/3600)+' h '+Math.floor(up%3600/60)+' min'],['Memoria libera',Math.round(s.heap/1024)+' KB'],['PSRAM libera',Math.round((s.psram||0)/1024)+' KB'],['Circuiti salvati',s.tracks<0?'memoria non disponibile':s.tracks],['Pagine collegate',s.clients]].map(v=>'<div><span>'+v[0]+'</span><b>'+v[1]+'</b></div>').join('')}).catch(()=>{})}
+ const up=s.uptime|0;$('sysinfo').innerHTML=[['Firmware',s.fw],['Indirizzo',s.ip],['Nome in rete',s.host?'<a href="http://'+s.host+'" style="color:inherit">'+s.host+'</a>':'-'],['Segnale Wi-Fi',s.rssi+' dBm'],['Acceso da',Math.floor(up/3600)+' h '+Math.floor(up%3600/60)+' min'],['Memoria libera',Math.round(s.heap/1024)+' KB'],['PSRAM libera',Math.round((s.psram||0)/1024)+' KB'],['Circuiti salvati',s.tracks<0?'memoria non disponibile':s.tracks],['Pagine collegate',s.clients]].map(v=>'<div><span>'+v[0]+'</span><b>'+v[1]+'</b></div>').join('')}).catch(()=>{})}
 buildLed();loadStatus();setInterval(()=>{if(document.querySelector('#tab-sys.sel'))loadStatus()},5000);
 </script>
 </body>
