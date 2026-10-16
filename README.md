@@ -260,7 +260,7 @@ Lo sfondo **Riepilogo** mostra i tempi della sessione appena guidata: giro migli
 
 ## Menu e impostazioni
 
-Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude da solo dopo 15 secondi.
+Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude da solo dopo 15 secondi (60 nelle impostazioni LED).
 
 | Impostazioni | Funzioni | Funzioni dopo l'azzeramento |
 | :-: | :-: | :-: |
@@ -269,12 +269,22 @@ Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude
 | <img src="docs/schermate/menu-selezione-tema.png" width="260"> | <img src="docs/schermate/menu-anteprima-tema.png" width="260"> | <img src="docs/schermate/menu-dispositivo.png" width="260"> |
 | **Sfondo: Minimale** | **Sfondo: Racing** | **Sfondo: Riepilogo** |
 | <img src="docs/schermate/menu-sfondo-minimale.png" width="260"> | <img src="docs/schermate/menu-sfondo-racing.png" width="260"> | <img src="docs/schermate/menu-sfondo-riepilogo.png" width="260"> |
-| **Controllo LED** | **LED non trovata** | **Scelta connessione** |
+| **Impostazioni LED** | **LED non trovata** | **Scelta connessione** |
 | <img src="docs/schermate/menu-led.png" width="260"> | <img src="docs/schermate/menu-led-non-trovata.png" width="260"> | <img src="docs/schermate/menu-scelta-connessione.png" width="260"> |
 | **Configurazione Wi-Fi** | **Ripristino totale** | **Calibrazione touch** |
 | <img src="docs/schermate/menu-wifi.png" width="260"> | <img src="docs/schermate/menu-ripristino.png" width="260"> | <img src="docs/schermate/menu-calibrazione-touch.png" width="260"> |
 | **Verifica calibrazione** | | |
 | <img src="docs/schermate/menu-calibrazione-verifica.png" width="260"> | | |
+
+**Impostazioni LED**: dallo schermo si gestiscono tutte le impostazioni della pagina web della striscia. Tema in gara, animazione a gioco fermo e avvisi si scelgono con una **demo animata**: la striscia disegnata intorno alla TV, con i LED di ogni lato come sono montati, calcolata dallo stesso codice degli effetti della striscia ([`LedEffects.h`](firmware/led-strip/src/LedEffects.h)) su una guida simulata (tre marce in pieno, frenata, curva).
+
+| Tema in gara: Delta | Tema in gara: F1 Center | Tema in gara: Forze G |
+| :-: | :-: | :-: |
+| <img src="docs/schermate/menu-led-tema-delta.png" width="260"> | <img src="docs/schermate/menu-led-tema-f1-center.png" width="260"> | <img src="docs/schermate/menu-led-tema-forze-g.png" width="260"> |
+| **Gioco fermo: Onda** | **Gioco fermo: Fuoco** | **Avviso: punti di frenata** |
+| <img src="docs/schermate/menu-led-riposo-onda.png" width="260"> | <img src="docs/schermate/menu-led-riposo-fuoco.png" width="260"> | <img src="docs/schermate/menu-led-avviso-frenata.png" width="260"> |
+| **Luce** | **Montaggio** | **Avanzate** |
+| <img src="docs/schermate/menu-led-luce.png" width="260"> | <img src="docs/schermate/menu-led-montaggio.png" width="260"> | <img src="docs/schermate/menu-led-avanzate.png" width="260"> |
 
 | Schermata | Cosa fa |
 | --- | --- |
@@ -282,7 +292,13 @@ Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude
 | **Funzioni** | Notifiche sì/no, delta *live* (metro per metro) o *ultimo giro* (differenza ultimo giro - migliore), **azzera mappa e tempi** (anche quelli salvati del circuito in corso) |
 | **Selezione tema** | Anteprima dal vivo, frecce per scorrere i 17 temi, *Applica* per salvarlo; toccando l'anteprima si vede a tutto schermo |
 | **Sfondo attesa** | Sceglie tra *Minimale* (logo Sparco su blu), *Racing* (sfondo a tutto schermo) e *Riepilogo* (tempi della sessione); la scelta resta dopo il riavvio |
-| **Controllo LED** | Tema e animazione di riposo, slider di luminosità e colore (si trascina col dito), ON/OFF |
+| **Impostazioni LED** | Riepilogo dei valori attuali, accensione/spegnimento rapido e i sottomenu qui sotto |
+| **LED: tema in gara** | Frecce per scorrere i 13 temi con la demo animata, *Applica* per mandarlo alla striscia |
+| **LED: gioco fermo** | Le 8 animazioni di riposo con la demo; per colore fisso, respiro e onda compare la barra del colore |
+| **LED: avvisi** | Gli 8 avvisi uno per pagina, ognuno con la sua demo, *Attivo/Disattivo* per accenderlo o spegnerlo |
+| **LED: luce** | Luminosità e gorgoglio (si trascinano col dito), limite di corrente, accesa/spenta |
+| **LED: montaggio** | LED del lato destro, alto e sinistro, lato di partenza della striscia, prova di montaggio da 15 s (tenendo premuto `-`/`+` il valore scorre) |
+| **LED: avanzate** | Scala del delta, spegnimento dopo N minuti senza GT7, riavvio della striscia, azzeramento di giri e circuito |
 | **Dispositivo** | Luminosità dello schermo, sorgente dati (GT7, AC, SimHub), ripristino di fabbrica (cancella anche i circuiti salvati) |
 | **Scelta connessione** | Al primo avvio: GT7 diretto, Assetto Corsa diretto o SimHub USB |
 | **Configurazione Wi-Fi** | QR code per collegarsi alla rete `GT7-DASH-SETUP` e aprire `192.168.4.1` |
@@ -385,7 +401,7 @@ Il flusso non blocca mai i LED: se un telefono non riesce a stare al passo salta
 | --- | --- | --- |
 | LED → rete | UDP broadcast, porta **33741**, ogni 2 s | `GT7LED\|<ip della striscia>` |
 | Schermo → LED | `GET http://<ip>/api/status` | Stato JSON: `rpm`, `gear`, `brightness`, `theme`, `idleMode`, `gurgle`, `leds`, `maxMa`, `idleColor`, e dalla versione 2 `themes` e `idleModes` (quanti ne scorre il menu LED), `alerts`, `right`/`top`/`left`, … |
-| Schermo → LED | `GET http://<ip>/api/settings?b=&l=&g=&ma=&im=&ic=&save=1` | Luminosità, numero LED, gorgoglio, limite mA, animazione di riposo, colore. Tutti facoltativi; la pagina web aggiunge `al` (avvisi), `zr`/`zt`/`zl` (LED per lato), `sl` (inizio a sinistra), `ds` (scala delta in decimi di s), `it` (spegnimento in minuti) |
+| Schermo → LED | `GET http://<ip>/api/settings?b=&l=&g=&ma=&im=&ic=&save=1` | Luminosità, numero LED, gorgoglio, limite mA, animazione di riposo, colore. Tutti facoltativi; con una striscia versione 2 lo schermo e la pagina web aggiungono `al` (avvisi), `zr`/`zt`/`zl` (LED per lato), `sl` (inizio a sinistra), `ds` (scala delta in decimi di s), `it` (spegnimento in minuti) |
 | Schermo → LED | `GET http://<ip>/api/theme?v=<0-12>` | Tema LED |
 | Browser → LED | `GET /api/events` | Flusso Server-Sent Events: evento `t` (telemetria JSON, 20 al secondo), evento `leds` (colori della striscia in esadecimale, 5 al secondo) |
 | Browser → LED | `GET /api/session` | Giri, settori migliori, mappa, punti di frenata, accelerazioni |
