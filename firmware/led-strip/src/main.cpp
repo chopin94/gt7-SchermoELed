@@ -193,7 +193,7 @@ static bool argInt(const char *name, int lo, int hi, int &out)
 }
 
 // Ogni valore è facoltativo: quelli assenti restano com'erano. Lo schermo
-// manda sempre b, l, g, ma, im, ic; la pagina web anche il resto.
+// manda sempre b, l, g, ma, im, ic e, con questa versione, anche il resto come la pagina web.
 void handleApiSettings()
 {
     LedFx::Settings &s = effects.settings;

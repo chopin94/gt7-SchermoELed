@@ -295,6 +295,23 @@ static void settingsScreen(SHCustomProtocol::SettingsScreen screen, const char *
     savePng(name);
 }
 
+// A submenu of IMPOSTAZIONI LED with its demo running for `ms` milliseconds.
+static void ledPicker(SHCustomProtocol::SettingsScreen screen, int preview, uint32_t ms, const char *name)
+{
+    tft.fillScreen(TFT_BLACK);
+    dash.showLedPicker(screen);
+    dash.ledPreview = preview;
+    dash.drawSettingsScreen();
+    const uint32_t start = g_hostMillis;
+    while (g_hostMillis - start < ms)
+    {
+        g_hostMillis += 34;
+        dash.updateLedDemo();
+    }
+    savePng(name);
+    dash.closeSettings();
+}
+
 // Hard braking: ABS working, behind on the best lap.
 static DashboardState brakingState(DashboardState st)
 {
@@ -489,10 +506,24 @@ int main(int argc, char **argv)
     settingsScreen(S::DeviceSettings, "menu-dispositivo");
     settingsScreen(S::LedSettings, "menu-led", [] {
         dash.ledStripFound = true;
-        dash.ledTheme = 1;
-        dash.ledIdleMode = 2;
+        dash.ledHasV2 = true;
+        dash.ledThemeCount = LedFx::THEME_COUNT;
+        dash.ledIdleModeCount = LedFx::IDLE_COUNT;
+        dash.ledTheme = 6;
+        dash.ledIdleMode = 4;
         dash.ledBrightness = 180;
+        dash.ledStripIP = "192.168.1.42";
     });
+    settingsScreen(S::LedLight, "menu-led-luce");
+    settingsScreen(S::LedLayout, "menu-led-montaggio");
+    settingsScreen(S::LedAdvanced, "menu-led-avanzate");
+    // Sottomenu con la demo animata: qualche fotogramma perché gli effetti partano.
+    ledPicker(S::LedThemePicker, 6, 2400, "menu-led-tema-delta");
+    ledPicker(S::LedThemePicker, 1, 4000, "menu-led-tema-f1-center");
+    ledPicker(S::LedThemePicker, 9, 5300, "menu-led-tema-forze-g");
+    ledPicker(S::LedIdlePicker, 4, 1500, "menu-led-riposo-onda");
+    ledPicker(S::LedIdlePicker, 5, 3000, "menu-led-riposo-fuoco");
+    ledPicker(S::LedAlerts, 3, 1200, "menu-led-avviso-frenata");
     settingsScreen(S::LedSettings, "menu-led-non-trovata", [] { dash.ledStripFound = false; });
     settingsScreen(S::ConnectionChoice, "menu-scelta-connessione", [] { dash.connectionChoiceCanCancel = true; });
     settingsScreen(S::WifiSettings, "menu-wifi");

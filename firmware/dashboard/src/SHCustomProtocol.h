@@ -4,6 +4,9 @@
 #include "LapAnalysis.h"
 #include "GripAnalysis.h"
 #include "TrackStore.h"
+// Effetti della striscia LED: le demo del menu IMPOSTAZIONI LED usano lo stesso codice.
+#include "../../led-strip/src/LedEffects.h"
+#include <new>
 #include "DashboardWiFiCredentials.h"
 #include <qrcode.h>
 
@@ -411,6 +414,12 @@ private:
 		TouchCalibration,
 		LedSettings,
 		Features,
+		LedThemePicker, // sottomenu di IMPOSTAZIONI LED (dashboard/LedRemote.inc)
+		LedIdlePicker,
+		LedAlerts,
+		LedLight,
+		LedLayout,
+		LedAdvanced,
 	};
 
 	static constexpr unsigned long SETTINGS_TIMEOUT_MS = 15000UL;
@@ -844,6 +853,16 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
             ledMaxCurrentMA = extractIntFromJson(payload, "maxMa", ledMaxCurrentMA);
             ledThemeCount = constrain(extractIntFromJson(payload, "themes", 6), 1, 32);
             ledIdleModeCount = constrain(extractIntFromJson(payload, "idleModes", 4), 1, 32);
+            ledHasV2 = payload.indexOf("\"alerts\":") >= 0;
+            if (ledHasV2) {
+                ledAlerts = extractIntFromJson(payload, "alerts", ledAlerts);
+                ledRight = extractIntFromJson(payload, "right", ledRight);
+                ledTop = extractIntFromJson(payload, "top", ledTop);
+                ledLeft = extractIntFromJson(payload, "left", ledLeft);
+                ledStartLeft = extractIntFromJson(payload, "startLeft", ledStartLeft) != 0;
+                ledDeltaScale = extractIntFromJson(payload, "deltaScale", ledDeltaScale);
+                ledIdleOffMin = extractIntFromJson(payload, "idleOff", ledIdleOffMin);
+            }
             const int idleColor = extractIntFromJson(payload, "idleColor", -1);
             if (idleColor >= 0) {
                 char hex[7];
@@ -858,6 +877,10 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         if (!ledStripFound || ledStripIP == "") return;
         HTTPClient http;
         String url = "http://" + ledStripIP + "/api/settings?b=" + String(ledBrightness) + "&l=" + String(ledActiveCount) + "&g=" + String(ledGurgle) + "&ma=" + String(ledMaxCurrentMA) + "&im=" + String(ledIdleMode) + "&ic=" + ledIdleColorHex + "&save=1";
+        // Dalla versione 2 lo schermo gestisce anche avvisi, montaggio, scala del delta e spegnimento.
+        if (ledHasV2)
+            url += "&al=" + String(ledAlerts) + "&zr=" + String(ledRight) + "&zt=" + String(ledTop) + "&zl=" + String(ledLeft) +
+                "&sl=" + String(ledStartLeft ? 1 : 0) + "&ds=" + String(ledDeltaScale) + "&it=" + String(ledIdleOffMin);
         http.begin(url);
         http.setTimeout(1000);
         http.GET();
@@ -870,27 +893,6 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         http2.end();
     }
     
-    // Aggiorna luminosità (3) o colore di riposo (6) dalla posizione X del dito.
-    // Solo stato locale: l'invio alla striscia avviene al rilascio del dito.
-    void updateLedSliderFromTouch(int button) {
-        if (button == 3) {
-            ledBrightness = map(constrain(lastSettingsTouchX, 20, 300), 20, 300, 0, 255);
-        }
-        else if (button == 6) {
-            int i = constrain(lastSettingsTouchX, 20, 300) - 20;
-            float hue = map(i, 0, 278, 0, 360);
-            float s = 1.0, v = 1.0;
-            float c = v * s; float x = c * (1 - abs(fmod(hue / 60.0, 2) - 1)); float m = v - c;
-            float r = 0, g = 0, b = 0;
-            if(hue < 60) {r=c; g=x;} else if(hue < 120) {r=x; g=c;} else if(hue < 180) {g=c; b=x;}
-            else if(hue < 240) {g=x; b=c;} else if(hue < 300) {r=x; b=c;} else {r=c; b=x;}
-            char hex[7];
-            snprintf(hex, sizeof(hex), "%02x%02x%02x", (int)((r+m)*255), (int)((g+m)*255), (int)((b+m)*255));
-            ledIdleColorHex = String(hex);
-            ledIdleMode = LED_IDLE_SOLID;
-        }
-    }
-
     void updateLedDiscovery() {
         if (WiFi.status() == WL_CONNECTED) {
             static bool ntpConfigured = false;
@@ -1706,6 +1708,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		// Keep reading touch while asleep so a tap can wake the display and a
 		// long press can open Settings.
         readTouch();
+        updateLedDemo();
         if (settingsScreen == SettingsScreen::WifiSettings &&
             settingsPressedButton < 0 && millis() - settingsStatusRefresh > 1000) {
             settingsStatusRefresh = millis();
@@ -2215,6 +2218,8 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		drawSettingsButton(b.x, b.y, b.w, b.h, b.label, pressed, active, destructive);
 	}
 
+#include "dashboard/LedRemote.inc"
+
 	void drawDeviceBrightnessValue()
 	{
 		drawSettingsButton(80, 50, 160, 38,
@@ -2471,48 +2476,9 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
             drawSettingsButton(0, 198, SCREEN_WIDTH / 2, 42, "ANNULLA", pressedButton == 3);
             drawSettingsButton(SCREEN_WIDTH / 2, 198, SCREEN_WIDTH / 2, 42, "SELEZIONA", pressedButton == 4, true);
 		}
-		else if (settingsScreen == SettingsScreen::LedSettings)
+		else if (isLedScreen(settingsScreen))
 		{
-			tft.setTextColor(TFT_WHITE, TFT_BLACK);
-			tft.drawString("CONTROLLO LED", X_CENTER, 8, 2);
-            if (!ledStripFound) {
-                tft.setTextColor(TFT_RED, TFT_BLACK);
-                tft.drawString("Striscia LED non trovata", X_CENTER, 120, 2);
-                drawSettingsButton(20, 204, 280, 28, "INDIETRO", pressedButton == 10);
-            } else {
-                drawSettingsButton(20, 22, 280, 25, "TEMA: " + getThemeName(ledTheme), pressedButton == 2);
-                drawSettingsButton(20, 50, 280, 25, "RIPOSO: " + getIdleName(ledIdleMode), pressedButton == 5);
-                
-                tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-                tft.drawString("LUMINOSITA'", X_CENTER, 85, 1);
-                tft.drawRect(20, 95, 280, 22, TFT_WHITE);
-                int mapB = map(ledBrightness, 0, 255, 0, 278);
-                tft.fillRect(21, 96, mapB, 20, TFT_LIGHTGREY);
-                tft.fillRect(21 + mapB, 96, 278 - mapB, 20, TFT_BLACK);
-                // Draw brightness percentage
-                tft.setTextDatum(MC_DATUM);
-                tft.setTextColor(TFT_BLACK, TFT_LIGHTGREY);
-                tft.drawString(String((ledBrightness * 100) / 255) + "%", 160, 107, 2);
-                tft.setTextDatum(TC_DATUM);
-                
-                tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-                tft.drawString("COLORE", X_CENTER, 125, 1);
-                for(int i=0; i<278; i++) {
-                    float hue = map(i, 0, 278, 0, 360);
-                    float s = 1.0, v = 1.0;
-                    float c = v * s; float x = c * (1 - abs(fmod(hue / 60.0, 2) - 1)); float m = v - c;
-                    float r = 0, g = 0, b = 0;
-                    if(hue < 60) {r=c; g=x;} else if(hue < 120) {r=x; g=c;} else if(hue < 180) {g=c; b=x;}
-                    else if(hue < 240) {g=x; b=c;} else if(hue < 300) {r=x; b=c;} else {r=c; b=x;}
-                    tft.drawFastVLine(21 + i, 136, 20, tft.color565((r+m)*255, (g+m)*255, (b+m)*255));
-                }
-                tft.drawRect(20, 135, 280, 22, TFT_WHITE);
-                
-                bool isOn = (ledBrightness > 0);
-                drawSettingsButton(20, 170, 60, 35, "ON", pressedButton == 0, isOn);
-                drawSettingsButton(85, 170, 60, 35, "OFF", pressedButton == 1, !isOn);
-                drawSettingsButton(155, 170, 145, 35, "INDIETRO", pressedButton == 10);
-            }
+			drawLedScreen(pressedButton);
 		}
 		else if (settingsScreen == SettingsScreen::DeviceSettings)
 		{
@@ -2575,20 +2541,11 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			// Preview controls intentionally have no pressed-state redraw. Avoiding
 			// a second full overlay pass keeps touch feedback flicker-free.
 		}
-				else if (settingsScreen == SettingsScreen::LedSettings)
+		else if (isLedScreen(settingsScreen))
 		{
-            // Stesse coordinate di drawSettingsScreen(): gli slider (3, 6) non hanno stato premuto.
-            if (ledStripFound) {
-                if (button == 2) drawSettingsButton(20, 22, 280, 25, "TEMA: " + getThemeName(ledTheme), pressed);
-                else if (button == 5) drawSettingsButton(20, 50, 280, 25, "RIPOSO: " + getIdleName(ledIdleMode), pressed);
-                else if (button == 0) drawSettingsButton(20, 170, 60, 35, "ON", pressed, ledBrightness > 0);
-                else if (button == 1) drawSettingsButton(85, 170, 60, 35, "OFF", pressed, ledBrightness == 0);
-                else if (button == 10) drawSettingsButton(155, 170, 145, 35, "INDIETRO", pressed);
-                return;
-            }
-			if (button == 10) drawSettingsButton(20, 204, 280, 28, "INDIETRO", pressed);
+			redrawLedButton(button, pressed);
 		}
-else if (settingsScreen == SettingsScreen::DeviceSettings)
+		else if (settingsScreen == SettingsScreen::DeviceSettings)
 		{
 			if (button == 0)
 				drawSettingsButton(20, 50, 50, 38, "-", pressed);
@@ -2643,6 +2600,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 		if (screen == SettingsScreen::BackgroundSelection) {
 			previewWaitingBackground = waitingBackground;
 		}
+		if (!isLedPicker(screen)) releaseLedDemo();
 		settingsScreen = screen;
 		wifiResetConfirmOpen = screen == SettingsScreen::ResetConfirmation;
 		settingsPressedButton = -1;
@@ -2652,6 +2610,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 
 	void closeSettings()
 	{
+		releaseLedDemo();
 		settingsScreen = SettingsScreen::Closed;
 		previewFullscreen = false;
 		wifiResetConfirmOpen = false;
@@ -2789,21 +2748,11 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 			if (touchInside(SCREEN_WIDTH / 2, 198, SCREEN_WIDTH / 2, 42)) return 4;
 		}
 
-				else if (settingsScreen == SettingsScreen::LedSettings)
+		else if (isLedScreen(settingsScreen))
 		{
-            if (ledStripFound) {
-                if (touchInside(20, 22, 280, 25)) return 2;
-                if (touchInside(20, 50, 280, 25)) return 5;
-                if (touchInside(20, 95, 280, 22)) return 3;  // Brightness slider
-                if (touchInside(20, 135, 280, 22)) return 6; // Color slider
-                if (touchInside(20, 170, 60, 35)) return 0;
-                if (touchInside(85, 170, 60, 35)) return 1;
-                if (touchInside(155, 170, 145, 35)) return 10;
-            } else {
-			    if (touchInside(20, 204, 280, 28)) return 10;
-            }
+			return ledButtonAtTouch();
 		}
-else if (settingsScreen == SettingsScreen::DeviceSettings)
+		else if (settingsScreen == SettingsScreen::DeviceSettings)
 		{
 			if (touchInside(20, 50, 50, 38)) return 0;
 			if (touchInside(250, 50, 50, 38)) return 1;
@@ -2964,32 +2913,11 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 				renderThemePreview();
 			}
 		}
-				else if (settingsScreen == SettingsScreen::LedSettings)
+		else if (isLedScreen(settingsScreen))
 		{
-            if (button == 10) showSettingsScreen(SettingsScreen::Main);
-            else if (ledStripFound) {
-                if (button == 0) { 
-                    if (ledBrightness == 0) ledBrightness = lastLedBrightness; 
-                    if (ledBrightness == 0) ledBrightness = 100; 
-                }
-                else if (button == 1) { 
-                    if (ledBrightness > 0) lastLedBrightness = ledBrightness; 
-                    ledBrightness = 0; 
-                }
-                else if (button == 2) {
-                    ledTheme = (ledTheme + 1) % ledThemeCount;
-                }
-                else if (button == 5) {
-                    ledIdleMode = (ledIdleMode + 1) % ledIdleModeCount;
-                }
-                else if (button == 3 || button == 6) {
-                    updateLedSliderFromTouch(button);
-                }
-                sendLedSettings();
-                drawSettingsScreen();
-            }
+			activateLedButton(button);
 		}
-else if (settingsScreen == SettingsScreen::DeviceSettings)
+		else if (settingsScreen == SettingsScreen::DeviceSettings)
 		{
 			if (button == 0 || button == 1)
 			{
@@ -3163,7 +3091,7 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 		{
 			if (!firstRun && settingsScreen != SettingsScreen::WifiSettings &&
 				!isTouched && settingsLastInteractionTime != 0 &&
-				millis() - settingsLastInteractionTime >= SETTINGS_TIMEOUT_MS)
+				millis() - settingsLastInteractionTime >= settingsTimeoutMs())
 			{
 				closeSettings();
 				wasTouched = false;
@@ -3175,20 +3103,16 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 				settingsLastInteractionTime = millis();
 				lastSettingsTouchX = touchX; // Save X for LED sliders
 				settingsPressedButton = settingsButtonAtTouch();
+				if (isLedScreen(settingsScreen)) ledTouchStarted();
 			}
 			else if (isTouched && wasTouched)
 			{
-				// Continuous swipe for LED sliders (buttons 3 and 6)
-				if (settingsScreen == SettingsScreen::LedSettings &&
-					(settingsPressedButton == 3 || settingsPressedButton == 6))
+				// LED sliders follow the finger, "-" and "+" repeat while held
+				if (isLedScreen(settingsScreen) && settingsPressedButton >= 0)
 				{
 					lastSettingsTouchX = touchX;
-					updateLedSliderFromTouch(settingsPressedButton);
-					if (millis() - lastLedSliderDraw >= 60)
-					{
-						lastLedSliderDraw = millis();
-						drawSettingsScreen(settingsPressedButton);
-					}
+					settingsLastInteractionTime = millis();
+					ledTouchHeld(settingsPressedButton);
 				}
 			}
 			else if (!isTouched && wasTouched)
@@ -3202,12 +3126,9 @@ else if (settingsScreen == SettingsScreen::DeviceSettings)
 					activateSettingsButton(pressedButton);
 					waitForReleaseAfterScreenChange = true;
 				}
-				else if (settingsScreen == SettingsScreen::LedSettings && ledStripFound &&
-					(pressedButton == 3 || pressedButton == 6))
+				else if (isLedScreen(settingsScreen) && pressedButton >= 0)
 				{
-					// Dito rilasciato fuori dallo slider: invia comunque l'ultimo valore.
-					sendLedSettings();
-					drawSettingsScreen();
+					ledTouchReleasedOutside(pressedButton);
 				}
 			}
 
