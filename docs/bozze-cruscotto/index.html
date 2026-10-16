@@ -1,0 +1,564 @@
+<title>Cruscotti GT7 per telefono</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#000000">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: galleria di bozze a sinistra/in alto, telefono simulato al centro, note tecniche sotto.
+   Unico look scuro scelto apposta: nero AMOLED, il cruscotto si fonde con la barra di stato. */
+:root{
+  color-scheme:dark;
+  --black:#000;          /* sfondo cruscotto e barra di stato */
+  --ground:#07080a;      /* sfondo della pagina bozze */
+  --panel:#101217;
+  --line:#1d2029;
+  --ink:#f1f2f5;
+  --dim:#7c8191;
+  --faint:#3a3e4a;
+  --red:#ff2b1c;
+  --green:#22d66a;
+  --yellow:#ffc21a;
+  --purple:#b14dff;
+  --blue:#2f8cff;
+  --cyan:#3cc8ff;
+  --amber:#ff8a00;
+  --num:'Barlow Condensed','Roboto Condensed','Arial Narrow',sans-serif-condensed,system-ui,sans-serif;
+  --body:'Barlow',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.45 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1240px;margin:0 auto;padding-block:20px 48px;display:grid;gap:22px}
+h1{font:700 30px/1.1 var(--num);letter-spacing:.5px;margin:0;text-wrap:balance}
+h1 b{color:var(--red)}
+.lead{color:var(--dim);margin:6px 0 0;max-width:68ch}
+.top{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button,.btn{font:600 13px var(--body);color:var(--dim);background:none;border:0;border-radius:7px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:#23262f;color:var(--ink)}
+.btn{background:var(--red);color:#fff}
+.btn:focus-visible,.seg button:focus-visible,.draft:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+.stage{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px;align-items:start}
+@media(max-width:860px){.stage{grid-template-columns:minmax(0,1fr)}}
+.drafts{display:grid;gap:8px}
+@media(max-width:860px){.drafts{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}}
+.draft{text-align:left;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;color:var(--ink);cursor:pointer;font:inherit;display:grid;gap:2px}
+.draft .n{font:700 18px var(--num);letter-spacing:.4px}
+.draft .n i{font-style:normal;color:var(--dim);margin-right:6px}
+.draft .d{font-size:12.5px;color:var(--dim);line-height:1.35}
+.draft[aria-pressed="true"]{border-color:var(--red);background:#17181e}
+.viewer{display:grid;justify-items:center;gap:10px;min-width:0}
+.fit{width:100%;display:flex;justify-content:center;align-items:flex-start;overflow:hidden}
+.phone{background:#1a1b1f;border-radius:46px;padding:12px;box-shadow:0 0 0 1px #2a2c33,0 30px 80px #000c;transform-origin:top center;flex:none}
+.phone .glass{background:var(--black);border-radius:36px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.phone.por .glass{width:390px;height:844px}
+.phone.lan .glass{width:844px;height:390px}
+.caption{font-size:12.5px;color:var(--dim);text-align:center;max-width:60ch}
+
+/* barra di stato finta: nel vero telefono è quella di sistema */
+.sbar{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font:600 14px var(--body);color:#fff;background:var(--black)}
+.phone.lan .sbar{height:24px;padding:0 40px;font-size:12px}
+.sbar .ic{display:flex;gap:6px;align-items:center}
+.batt{width:24px;height:11px;border:1.5px solid #fff;border-radius:3px;position:relative;padding:1px}
+.batt::after{content:"";position:absolute;right:-4px;top:2.5px;width:2px;height:4px;background:#fff;border-radius:1px}
+.batt i{display:block;height:100%;width:72%;background:#fff;border-radius:1px}
+.dot{width:5px;height:5px;border-radius:50%;background:#fff}
+
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:14px}
+.note{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
+.note h2{font:700 15px var(--num);letter-spacing:1.2px;text-transform:uppercase;margin:0 0 8px;color:var(--ink)}
+.note p,.note li{color:#b9bdc8;font-size:14px}
+.note ul{margin:0;padding-left:18px;display:grid;gap:5px}
+.note code{font:13px ui-monospace,Menlo,Consolas,monospace;color:var(--cyan)}
+.tbl{overflow-x:auto}
+.tbl table{border-collapse:collapse;width:100%;font-size:13px}
+.tbl td{border-top:1px solid var(--line);padding:5px 6px;vertical-align:top;color:#b9bdc8}
+.tbl td:first-child{font:12.5px ui-monospace,Menlo,monospace;color:var(--cyan);white-space:nowrap}
+
+/* ===== schermo del cruscotto (uguale nella bozza e a tutto schermo) ===== */
+.dash{flex:1;min-height:0;position:relative;background:var(--black);color:var(--ink);font-family:var(--num);
+  font-variant-numeric:tabular-nums;overflow:hidden;user-select:none;-webkit-user-select:none;container-type:size}
+.dash canvas{display:block;width:100%;height:100%}
+.lbl{font:600 max(10px,2.2cqmin) var(--body);letter-spacing:1.4px;text-transform:uppercase;color:var(--dim)}
+.v{font-weight:700;line-height:.95}
+.shift{display:grid;grid-template-columns:repeat(16,1fr);gap:.8cqmin;height:100%}
+.shift i{border-radius:.8cqmin;background:#121318;transition:none}
+.shift i.g{background:var(--green)}.shift i.y{background:var(--yellow)}.shift i.r{background:var(--red)}.shift i.b{background:var(--blue)}
+.shift.flash i{background:var(--blue)}
+.secs{display:grid;grid-template-columns:repeat(3,1fr);gap:1cqmin}
+.secs i{height:100%;min-height:6px;border-radius:.8cqmin;background:#191b21;font-style:normal;display:flex;align-items:center;justify-content:center;font-weight:700;color:#000}
+.secs i.s1{background:#3a3e4a;color:var(--ink)}
+.secs i.s2{background:var(--purple)}.secs i.s3{background:var(--green)}.secs i.s4{background:var(--yellow)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.chip{display:inline-block;font:700 max(10px,2cqmin) var(--body);letter-spacing:1px;padding:.4cqmin 1.2cqmin;border-radius:.8cqmin;background:#16181e;color:#3a3e4a}
+.chip.on{background:var(--amber);color:#000}
+.cell{display:flex;flex-direction:column;justify-content:center;min-width:0;min-height:0}
+.r{text-align:right;align-items:flex-end}
+.c{text-align:center;align-items:center}
+.ped{display:flex;gap:1cqmin;align-items:flex-end;height:100%}
+.ped div{flex:1;height:100%;background:#121318;border-radius:.8cqmin;position:relative;overflow:hidden}
+.ped b{position:absolute;left:0;right:0;bottom:0;border-radius:.8cqmin}
+.ped .t b{background:var(--green)}.ped .k b{background:var(--red)}.ped .u b{background:var(--blue)}
+.ped .o{position:absolute;left:0;right:0;height:2px;background:#fff}
+.hb{height:100%;background:#121318;border-radius:.8cqmin;overflow:hidden;position:relative}
+.hb b{position:absolute;top:0;bottom:0;left:0;background:var(--cyan)}
+.tyre{border-radius:2cqmin;display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px solid transparent;color:#000;font-weight:700}
+.tyre.lock{border-color:var(--red)}.tyre.spin{border-color:var(--cyan)}
+
+/* --- 1 Gara --- */
+.d-gara{display:grid;padding:2cqmin 3cqmin 3cqmin;gap:2cqmin}
+.por .d-gara{grid-template:"sh sh" 4cqh "gr gr" minmax(0,1fr) "sp dl" auto "sc sc" 1.6cqh "t1 t2" auto "t3 t4" auto / 1fr 1fr}
+.lan .d-gara{grid-template:"sh sh sh" 7cqh "sp gr dl" minmax(0,1fr) "sc sc sc" 3cqh "t1 t2 t3" auto / 1fr 1.1fr 1fr;column-gap:4cqmin}
+.lan .d-gara .t4{display:none}
+.lan .d-gara .t2{align-items:center;text-align:center}
+.lan .d-gara .t3{align-items:flex-end;text-align:right}
+.d-gara .gear{grid-area:gr;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.d-gara .gear .v{font-size:min(62cqh,52cqw);font-weight:800}
+.lan .d-gara .gear .v{font-size:56cqh}
+.d-gara .gear .sg{font:600 3.2cqmin var(--body);color:var(--cyan);height:4cqmin}
+.d-gara .rpmtxt{font-size:4cqmin;color:var(--dim)}
+.d-gara .big{font-size:13cqmin}
+.lan .d-gara .big{font-size:20cqh}
+.d-gara .tm{font-size:7cqmin}
+.lan .d-gara .tm{font-size:10cqh}
+
+/* --- 2 Delta --- */
+.d-delta{display:grid;padding:2cqmin 3cqmin 3cqmin;gap:2cqmin}
+.por .d-delta{grid-template:"sh sh" 2.4cqh "hd hd" minmax(0,1fr) "bar bar" 3cqh "sc sc" 7cqh "pr pr" auto "a b" auto / 1fr 1fr}
+.lan .d-delta{grid-template:"sh sh sh" 4cqh "hd hd pr" 1fr "bar bar a" 5cqh "sc sc b" 12cqh / 1fr 1fr .9fr;column-gap:4cqmin}
+.d-delta .hd{grid-area:hd;border-radius:3cqmin;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:background-color .25s}
+.d-delta .hd .v{font-size:min(30cqh,32cqw);font-weight:800}
+.lan .d-delta .hd .v{font-size:min(46cqh,24cqw)}
+.d-delta .mini{display:flex;gap:4cqmin;font-size:6cqmin;color:var(--dim);margin-top:1cqmin}
+.d-delta .mini b{color:var(--ink)}
+.d-delta .bar{grid-area:bar;position:relative;background:#121318;border-radius:1cqmin;overflow:hidden}
+.d-delta .bar b{position:absolute;top:0;bottom:0}
+.d-delta .bar::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:#fff}
+.d-delta .secs i{font-size:4.6cqmin}
+.d-delta .x{font-size:8cqmin}
+
+/* --- 3 Analogico --- */
+.d-ana{display:grid;padding:2cqmin 3cqmin 3cqmin;gap:2.4cqmin}
+.por .d-ana{grid-template:"tc tc tc" minmax(0,1fr) "a b c" auto "d e f" auto "fu fu fu" 2cqh / 1fr 1fr 1fr}
+.lan .d-ana{grid-template:"a tc d" 1fr "b tc e" 1fr "c tc f" 1fr "fu fu fu" 3cqh / 1fr 1.7fr 1fr;column-gap:4cqmin}
+.d-ana .tc{grid-area:tc;position:relative;min-height:0}
+.d-ana .tc .in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.d-ana .tc .gv{font-size:min(26cqh,30cqw);font-weight:800}
+.lan .d-ana .tc .gv{font-size:40cqh}
+.d-ana .tc .kv{font-size:min(8cqh,9cqw);font-weight:600;margin-top:1cqmin}
+.d-ana .tc .kv span{font:600 3cqmin var(--body);color:var(--dim);margin-left:.6cqmin}
+.d-ana .x{font-size:9cqmin}
+.lan .d-ana .x{font-size:13cqh}
+.d-ana .x small{font:600 3cqmin var(--body);color:var(--dim);margin-left:.6cqmin}
+
+/* --- 4 Ingegnere --- */
+.d-ing{display:grid;padding:2cqmin 3cqmin 3cqmin;gap:2.4cqmin}
+.por .d-ing{grid-template:"hd hd" auto "gc gc" minmax(0,1fr) "ty pd" 30cqh "ev ev" auto / 1fr 24cqw}
+.lan .d-ing{grid-template:"hd hd hd" auto "ty gc pd" minmax(0,1fr) "ev ev ev" auto / 1.1fr 1.2fr .7fr;column-gap:3cqmin}
+.d-ing .hd{grid-area:hd;display:flex;justify-content:space-between;align-items:baseline}
+.d-ing .hd .v{font-size:12cqmin}
+.lan .d-ing .hd .v{font-size:14cqh}
+.d-ing .tys{grid-area:ty;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2cqmin;min-height:0}
+.d-ing .tyre .v{font-size:8cqmin}
+.d-ing .tyre small{font:600 2.6cqmin var(--body);opacity:.75}
+.d-ing .gc{grid-area:gc;min-height:0;position:relative}
+.d-ing .pd{grid-area:pd;display:grid;grid-template-rows:auto 1fr;gap:1cqmin;min-height:0}
+.d-ing .ev{grid-area:ev;display:flex;gap:3cqmin;justify-content:space-between;font-size:5cqmin;flex-wrap:wrap}
+.d-ing .ev span{color:var(--dim);font:600 2.6cqmin var(--body);letter-spacing:1px;text-transform:uppercase;margin-right:.8cqmin}
+
+/* --- 5 Circuito --- */
+.d-map{display:grid;padding:2cqmin 3cqmin 3cqmin;gap:2cqmin}
+.por .d-map{grid-template:"sh sh sh" 2.4cqh "mp mp mp" minmax(0,1fr) "bk bk bk" auto "g k d" auto / 1fr 1fr 1fr}
+.lan .d-map{grid-template:"sh sh" 4cqh "mp bk" 1fr "mp g" auto "mp k" auto "mp d" auto / 1.5fr 1fr;column-gap:4cqmin}
+.d-map .mp{grid-area:mp;min-height:0;position:relative}
+.d-map .bk{grid-area:bk;border-radius:2.4cqmin;background:#121318;padding:2cqmin 3cqmin;display:flex;justify-content:space-between;align-items:center;gap:2cqmin}
+.d-map .bk.near{background:var(--red);color:#fff}
+.d-map .bk.near .lbl{color:#ffd3cf}
+.d-map .bk .v{font-size:11cqmin}
+.lan .d-map .bk .v{font-size:14cqh}
+.d-map .x{font-size:9cqmin}
+.lan .d-map .x{font-size:11cqh}
+
+/* --- 6 Essenziale --- */
+.d-min{display:grid;padding:3cqmin;gap:3cqmin}
+.por .d-min{grid-template:"sh" 9cqh "gr" minmax(0,1fr) "dl" auto / 1fr}
+.lan .d-min{grid-template:"sh sh" 14cqh "gr dl" 1fr / 1fr 1fr;column-gap:4cqmin}
+.d-min .shift{gap:1.2cqmin}.d-min .shift i{border-radius:50%}
+.d-min .shift{grid-template-columns:repeat(10,1fr);align-items:center}
+.d-min .shift i{aspect-ratio:1;height:auto;max-height:100%;justify-self:center;width:100%;max-width:8cqh}
+.d-min .gear{grid-area:gr;display:flex;align-items:center;justify-content:center}
+.d-min .gear .v{font-size:min(60cqh,70cqw);font-weight:800}
+.lan .d-min .gear .v{font-size:80cqh}
+.d-min .dl{grid-area:dl;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.d-min .dl .v{font-size:18cqmin;font-weight:800}
+.lan .d-min .dl .v{font-size:30cqh}
+
+.paused::after{content:"IN PAUSA";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000a;font:700 8cqmin var(--num);letter-spacing:4px;color:var(--yellow)}
+
+/* ===== tutto schermo sul telefono ===== */
+#live{position:fixed;inset:0;z-index:50;background:var(--black);display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+#live .exit{position:absolute;right:calc(10px + env(safe-area-inset-right,0px));bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:3;
+  font:600 12px var(--body);color:#555a66;background:#0d0e12;border:1px solid #1b1d24;border-radius:20px;padding:6px 12px;cursor:pointer}
+#live .swipe{position:absolute;left:0;right:0;top:calc(4px + env(safe-area-inset-top,0px));text-align:center;z-index:3;font:600 11px var(--body);color:#555a66;pointer-events:none;transition:opacity .6s}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap" id="page">
+  <div class="top">
+    <div>
+      <h1>Cruscotti <b>GT7</b> per telefono</h1>
+      <p class="lead">Sei bozze pensate per lo schermo del telefono, in verticale e in orizzontale. I numeri vengono da un simulatore che manda gli stessi campi della striscia LED (<code style="color:var(--cyan)">/api/events</code>, 20 al secondo) e il disegno li interpola a 60 fotogrammi al secondo.</p>
+    </div>
+    <div class="ctrl">
+      <div class="seg" role="group" aria-label="Orientamento">
+        <button id="o-por" aria-pressed="true">Verticale</button>
+        <button id="o-lan" aria-pressed="false">Orizzontale</button>
+      </div>
+      <button class="btn" id="go">Prova a tutto schermo</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="drafts" id="drafts"></div>
+    <div class="viewer">
+      <div class="fit" id="fit">
+        <div class="phone por" id="phone">
+          <div class="glass">
+            <div class="sbar"><span id="clock">9:41</span><span class="ic"><span class="dot"></span><span>5G</span><span class="batt"><i></i></span></span></div>
+            <div class="dash" id="dash"></div>
+          </div>
+        </div>
+      </div>
+      <p class="caption" id="cap"></p>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h2>Come si apre dal telefono</h2>
+      <ul>
+        <li>Nella pagina della striscia un bottone <b>Cruscotto</b> porta a una pagina dedicata, ad esempio <code>/cruscotto</code>, con solo lo schermo nero.</li>
+        <li>Indirizzo con il nome: la striscia si annuncia con mDNS come <code>http://gt7led.local</code>. Funziona su iPhone e su Android recenti; se un telefono non lo risolve resta l'IP come riserva.</li>
+        <li>Aggiunta alla schermata Home: si apre senza barre del browser e con la barra di stato nera (ora, notifiche, batteria) sopra al cruscotto, che col nero AMOLED diventano un unico pezzo.</li>
+        <li>Scorrendo a sinistra e a destra si cambia cruscotto; si ricorda l'ultimo scelto.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h2>Fluido e sempre acceso</h2>
+      <ul>
+        <li>Il disegno gira a 60 fps e interpola i 20 fotogrammi al secondo della striscia: lancette e barre non scattano. Volendo il flusso del cruscotto può salire a 30 Hz.</li>
+        <li>Si aggiorna solo ciò che cambia: niente rielaborazione della pagina a ogni fotogramma, le grafiche sono su canvas.</li>
+        <li>Schermo che non si spegne: la Wake Lock del browser richiede HTTPS, quindi su <code>http://</code> si usa il trucco del video muto in loop, avviato dal primo tocco.</li>
+        <li>Se il Wi-Fi cade il cruscotto resta fermo sull'ultimo valore con l'indicatore spento e si ricollega da solo.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h2>Telemetria disponibile</h2>
+      <div class="tbl"><table>
+        <tr><td>g sg rpm mx al</td><td>marcia, marcia consigliata, giri, limite e inizio shift light</td></tr>
+        <tr><td>kmh thr brk clu</td><td>velocità, pedali (thro/brko dopo TCS e ABS)</td></tr>
+        <tr><td>d ref cur last best</td><td>delta live, giro di riferimento e tempi</td></tr>
+        <tr><td>sec ss sm bs ls</td><td>settori: stato, tempi, migliori</td></tr>
+        <tr><td>x z prog nb nbk lb</td><td>mappa, avanzamento, prossima frenata e ultima</td></tr>
+        <tr><td>tt sl ws sus lk</td><td>gomme: temperatura, slittamento, stato, carico, bloccaggi</td></tr>
+        <tr><td>glat glon gu</td><td>forze G e uso dell'aderenza</td></tr>
+        <tr><td>fuel cap fl fpl</td><td>carburante, giri rimasti, consumo per giro</td></tr>
+        <tr><td>boost oil wt ot f</td><td>turbo, olio, acqua, spie (ABS, TCS, ASM, limitatore, luci)</td></tr>
+        <tr><td>lap tl pos cars</td><td>giro, giri totali, posizione</td></tr>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<div id="live" hidden><div class="swipe" id="swipe">scorri per cambiare cruscotto</div><button class="exit" id="exit">Esci</button></div>
+
+<script>
+"use strict";
+/* ================= simulatore: stessi campi del firmware ================= */
+const SIM=(()=>{
+  const N=1200,L=4200,ds=L/N;
+  let P=[];
+  for(let i=0;i<N;i++){const a=2*Math.PI*i/N,r=1+.30*Math.sin(3*a+.4)+.13*Math.cos(5*a)+.07*Math.sin(8*a+1);P.push([r*Math.cos(a),r*Math.sin(a)]);}
+  let len=0;for(let i=0;i<N;i++){const p=P[i],q=P[(i+1)%N];len+=Math.hypot(q[0]-p[0],q[1]-p[1]);}
+  const s=L/len;P=P.map(p=>[p[0]*s,p[1]*s]);
+  const v=[],k=[];
+  for(let i=0;i<N;i++){const a=P[(i-3+N)%N],b=P[i],c=P[(i+3)%N];
+    const cr=(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+    const dd=Math.hypot(b[0]-a[0],b[1]-a[1])*Math.hypot(c[0]-b[0],c[1]-b[1])*Math.hypot(c[0]-a[0],c[1]-a[1]);
+    k.push(2*cr/dd);v.push(Math.min(86,Math.sqrt(1.45*9.81/Math.abs(k[i]))));}
+  for(let r=0;r<2;r++)for(let i=N-1;i>=0;i--){const n=v[(i+1)%N];v[i]=Math.min(v[i],Math.sqrt(n*n+2*1.35*9.81*ds));}
+  for(let r=0;r<2;r++)for(let i=0;i<N;i++){const p=v[(i-1+N)%N];v[i]=Math.min(v[i],Math.sqrt(p*p+2*Math.max(1.2,7.5-p*.075)*ds));}
+  const tAt=[0];for(let i=1;i<=N;i++)tAt.push(tAt[i-1]+ds/v[i-1]);
+  const T=tAt[N];
+  // zone di frenata: dove la velocità inizia a scendere, con il minimo che segue
+  const brakes=[];
+  for(let i=0;i<N;i++){const pv=v[(i-1+N)%N];if(v[i]<pv-.02&&pv>=v[(i-2+N)%N]){let j=i,m=v[i];while(v[(j+1)%N]<=v[j%N]+.001&&j<i+N){j++;m=Math.min(m,v[j%N]);}if((pv-m)*3.6>18)brakes.push({i,kmh:m*3.6});}}
+  const ratio=[0,265,190,148,121,103,92],MX=8200,AL=6900;
+  let dist=0,elapsed=0,lap=1,f=1.004,ph=0,gear=1,fuel=62,lapFuel=0,lockEv=0,spinEv=0,lastLock=0,lastSpin=0;
+  let last=0,best=0,bestF=1.004,secMs=[0,0,0],secStart=0,sec=0,bestSec=[0,0,0],bestLapSec=[0,0,0],ss=[1,0,0],ls=[0,0,0];
+  let STATE={};const tt=[78,78,74,74];let paused=false,lb=null,nbiPrev=-1,abs=false,tcs=false,ws=[1,1,1,1],sl=[0,0,0,0];
+  function idx(d){return ((Math.floor(d/ds))%N+N)%N}
+  function step(dt){
+    if(paused)return;
+    const i=idx(dist),fr=(dist/ds)%1,vi=v[i]+(v[(i+1)%N]-v[i])*fr;
+    const ff=f+.005*Math.sin(2*Math.PI*dist/L*2+ph);
+    const spd=vi/ff;
+    dist+=spd*dt;elapsed+=dt;
+    const ns=Math.min(2,Math.floor(dist/(L/3)));
+    if(ns!==sec){closeSector(sec);sec=ns;}
+    if(dist>=L){closeSector(2);dist-=L;
+      const lt=Math.round(elapsed*1000);last=lt;
+      if(!best||lt<best){best=lt;bestF=f;bestLapSec=secMs.slice();}
+      ls=ss.slice();ss=[1,0,0];sec=0;secStart=0;elapsed=0;lap++;lastLock=lockEv;lastSpin=spinEv;lockEv=spinEv=0;
+      lapFuel=0;f=.997+Math.random()*.014;ph=Math.random()*6.28;}
+    // marcia e giri
+    let rpm=spd*ratio[gear];
+    if(rpm>7950&&gear<6){gear++;rpm=spd*ratio[gear];}
+    else if(gear>1&&spd*ratio[gear-1]<7300&&rpm<4700){gear--;rpm=spd*ratio[gear];}
+    rpm=Math.max(1100,Math.min(MX+150,rpm));
+    const a=(v[(i+1)%N]-v[i])/ds*spd; // accelerazione lungo la pista
+    let thr=0,brk=0;
+    if(a<-1.5){brk=Math.min(100,30+(-a)*7);thr=0}else if(a>.4){thr=100}else{thr=55+Math.abs(k[i])*0}
+    abs=brk>88&&Math.random()<.5;tcs=gear<=2&&thr>90&&Math.random()<.3;
+    const glon=a/9.81,glat=spd*spd*k[i]/9.81;
+    for(let w=0;w<4;w++){const front=w<2,left=w%2===0;
+      const target=72+(front?6:2)+Math.abs(glat)*14+(left===(glat<0)?Math.abs(glat)*6:0)+(front?brk*.12:thr*.05);
+      tt[w]+=(target-tt[w])*dt*.25;
+      sl[w]=Math.max(0,(front&&brk>85?6+Math.random()*10:0)+(!front&&tcs?8:0)+Math.random()*1.2);
+      ws[w]=front&&brk>94&&Math.random()<.15?2:(!front&&tcs?3:1);}
+    if(ws[0]===2&&Math.random()<.05)lockEv++;if(tcs&&Math.random()<.04)spinEv++;
+    const burn=(.0004+thr/100*.0016)*spd*dt/10;fuel=Math.max(0,fuel-burn);lapFuel+=burn;
+    // frenate
+    let nb=null,nbk=null,nbi=-1;
+    for(let b=0;b<brakes.length;b++){const bd=(brakes[b].i*ds-dist+L)%L;if(nb===null||bd<nb){nb=bd;nbk=brakes[b].kmh;nbi=b;}}
+    if(nbi!==nbiPrev&&nbiPrev>=0){lb=[(Math.random()*16-8),Math.round(brakes[nbiPrev].kmh+(Math.random()*10-5)),0,nbiPrev];}nbiPrev=nbi;
+    const refT=tAt[i]+(tAt[i+1]-tAt[i])*fr, d=best?Math.round((elapsed-refT*bestF)*1000):null;
+    STATE={pt:Date.now(),live:1,race:1,f:(1|8|16)|(abs?0:0)|(tcs?2048:0)|(rpm>MX?32:0),hz:59.9,rpm,mx:MX,al:AL,kmh:spd*3.6,g:gear,sg:gear<6&&rpm>7600?gear+1:0,
+      thr,brk,thro:tcs?thr*.7:thr,brko:abs?brk*.6:brk,clu:0,abs:abs?1:0,fuel,cap:80,fl:fuel/2.55,fpl:2.55,boost:Math.min(1.25,thr/100*1.3*Math.min(1,rpm/5000))-.15,
+      oil:5.1+rpm/MX*.4,wt:89+Math.sin(elapsed/9)*1.5,ot:104+Math.sin(elapsed/13)*2,tt:tt.slice(),sl:sl.slice(),ws:ws.slice(),sus:[.3,.3,.4,.4],
+      glat,glon,gu:Math.min(1.2,Math.hypot(glat,glon)/1.45),lk:[lockEv,spinEv,lastLock,lastSpin],lap,tl:0,cur:Math.round(elapsed*1000),last,best,
+      d,ref:best,sec,ss:ss.slice(),sm:secMs.slice(),ls:ls.slice(),bs:bestSec.slice(),x:P[i][0],z:P[i][1],prog:dist/L,pos:3,cars:16,nb,nbk,nbi,lb,_paused:paused};
+  }
+  function closeSector(n){
+    const t=Math.round((elapsed-secStart)*1000);secStart=elapsed;secMs[n]=t;
+    if(!bestSec[n]||t<bestSec[n]){bestSec[n]=t;ss[n]=2}else ss[n]=bestLapSec[n]&&t<bestLapSec[n]?3:4;
+    if(n<2)ss[n+1]=1;}
+  // un giro già fatto, così delta e settori sono attivi da subito
+  for(let t=0;t<T+12;t+=.05)step(.05);
+  step(.05);
+  return{get frame(){return STATE},step,track:P,brakes,L,togglePause(){paused=!paused;STATE._paused=paused}};
+})();
+
+/* ================= flusso a 20 Hz e interpolazione ================= */
+let prev=null,cur=null,curAt=0;
+setInterval(()=>{SIM.step(.05);prev=cur;cur=JSON.parse(JSON.stringify(SIM.frame));curAt=performance.now();},50);
+const SMOOTH=['rpm','kmh','glat','glon','x','z','prog','d','thr','brk','thro','brko','nb','gu','boost'];
+function view(now){
+  if(!cur)return null;if(!prev)return cur;
+  const a=Math.min(1,(now-curAt)/50),o=Object.assign({},cur);
+  for(const k of SMOOTH){const p=prev[k],c=cur[k];if(typeof p==='number'&&typeof c==='number'){
+    if(k==='prog'&&Math.abs(c-p)>.5){continue}
+    if(k==='nb'&&c>p+20)continue;
+    o[k]=p+(c-p)*a;}}
+  return o;
+}
+
+/* ================= formati ================= */
+const lt=ms=>{if(!ms||ms<0)return'-:--.---';const m=Math.floor(ms/60000),s=(ms%60000)/1000;return m+':'+s.toFixed(3).padStart(6,'0')};
+const dlt=ms=>ms==null?'±0.00':(ms<0?'−':'+')+(Math.abs(ms)/1000).toFixed(2);
+const gr=g=>g===0?'N':g<0?'R':String(g);
+const tyreColor=t=>t<65?'#2f8cff':t<80?'#22d66a':t<95?'#ffc21a':'#ff2b1c';
+
+/* ================= pezzi comuni ================= */
+function shiftLights(el,o,n){
+  if(!el._b){el.innerHTML='<i></i>'.repeat(n);el._b=[...el.children];}
+  const lo=o.al*.86,f=Math.max(0,Math.min(1,(o.rpm-lo)/(o.mx-lo))),on=Math.round(f*n),flash=o.rpm>=o.mx-40;
+  el.classList.toggle('flash',flash&&(performance.now()%160<80));
+  el._b.forEach((b,i)=>{b.className=i<on?(i<n*.4?'g':i<n*.75?'y':i<n*.94?'r':'b'):'';});
+}
+function sectors(el,o,withTimes){
+  if(!el._b){el.innerHTML='<i></i><i></i><i></i>';el._b=[...el.children];}
+  el._b.forEach((b,i)=>{const st=o.ss[i]||0;b.className='s'+st;if(withTimes)b.textContent=st>=2?(o.sm[i]/1000).toFixed(2):st===1?'S'+(i+1):'';});
+}
+function sizeCanvas(c){const r=c.getBoundingClientRect(),d=devicePixelRatio||1,w=Math.round(r.width*d),h=Math.round(r.height*d);
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h;}const x=c.getContext('2d');x.setTransform(d,0,0,d,0,0);return{x,w:r.width,h:r.height};}
+const trackBox=(()=>{let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const p of SIM.track){a=Math.min(a,p[0]);b=Math.min(b,p[1]);c=Math.max(c,p[0]);d=Math.max(d,p[1]);}return[a,b,c,d]})();
+function drawMap(c,o,thick){
+  const{x,w,h}=sizeCanvas(c);x.clearRect(0,0,w,h);
+  const[a,b,cc,d]=trackBox,pad=14,sc=Math.min((w-2*pad)/(cc-a),(h-2*pad)/(d-b)),ox=(w-(cc-a)*sc)/2,oy=(h-(d-b)*sc)/2;
+  const X=p=>ox+(p[0]-a)*sc,Y=p=>oy+(d-p[1])*sc,T=SIM.track,n=T.length,cols=['#3a3e4a','#3a3e4a','#3a3e4a'];
+  for(let s=0;s<3;s++){const st=o.ss[s];cols[s]=st===2?'#b14dff':st===3?'#22d66a':st===4?'#ffc21a':'#2a2d36';}
+  x.lineCap='round';x.lineJoin='round';x.lineWidth=thick;
+  for(let s=0;s<3;s++){x.beginPath();x.strokeStyle=cols[s];for(let i=Math.floor(s*n/3);i<=Math.floor((s+1)*n/3);i+=3){const p=T[i%n];i===Math.floor(s*n/3)?x.moveTo(X(p),Y(p)):x.lineTo(X(p),Y(p));}x.stroke();}
+  x.fillStyle='#ff2b1c';for(let k=0;k<SIM.brakes.length;k++){const p=T[SIM.brakes[k].i];x.beginPath();x.arc(X(p),Y(p),k===o.nbi?thick*.9:thick*.5,0,7);x.fill();}
+  const p=[o.x,o.z];x.fillStyle='#fff';x.beginPath();x.arc(X(p),Y(p),thick*1.15,0,7);x.fill();
+  x.strokeStyle='#000';x.lineWidth=2;x.stroke();
+}
+const trail=[];
+function drawG(c,o){
+  const{x,w,h}=sizeCanvas(c);x.clearRect(0,0,w,h);const r=Math.min(w,h)/2-10,cx=w/2,cy=h/2,G=1.8;
+  x.strokeStyle='#1d2029';x.lineWidth=1;for(const g of[.5,1,1.5]){x.beginPath();x.arc(cx,cy,r*g/G,0,7);x.stroke();}
+  x.beginPath();x.moveTo(cx-r,cy);x.lineTo(cx+r,cy);x.moveTo(cx,cy-r);x.lineTo(cx,cy+r);x.stroke();
+  x.fillStyle='#3a3e4a';x.font='600 11px Barlow,system-ui';x.fillText('1 G',cx+r/G+3,cy-3);
+  trail.push([o.glat,o.glon]);if(trail.length>45)trail.shift();
+  for(let i=1;i<trail.length;i++){x.strokeStyle=`rgba(60,200,255,${i/trail.length*.8})`;x.lineWidth=3;x.beginPath();
+    x.moveTo(cx+trail[i-1][0]/G*r,cy-trail[i-1][1]/G*r);x.lineTo(cx+trail[i][0]/G*r,cy-trail[i][1]/G*r);x.stroke();}
+  x.fillStyle='#fff';x.beginPath();x.arc(cx+o.glat/G*r,cy-o.glon/G*r,7,0,7);x.fill();
+}
+function drawTach(c,o){
+  const{x,w,h}=sizeCanvas(c);x.clearRect(0,0,w,h);
+  const r=Math.min(w,h)/2-8,cx=w/2,cy=h/2,a0=Math.PI*.75,a1=Math.PI*2.25,max=9000,A=v=>a0+(a1-a0)*Math.min(1,v/max);
+  x.lineCap='butt';x.lineWidth=r*.09;x.strokeStyle='#121318';x.beginPath();x.arc(cx,cy,r,a0,a1);x.stroke();
+  x.strokeStyle='#4a0d09';x.beginPath();x.arc(cx,cy,r,A(o.mx),a1);x.stroke();
+  const hot=o.rpm>=o.al;x.strokeStyle=o.rpm>=o.mx-40?'#2f8cff':hot?'#ff2b1c':'#f1f2f5';x.beginPath();x.arc(cx,cy,r,a0,A(o.rpm));x.stroke();
+  x.fillStyle='#7c8191';x.font=`600 ${Math.round(r*.11)}px 'Barlow Condensed',system-ui`;x.textAlign='center';x.textBaseline='middle';
+  for(let k=0;k<=9;k++){const a=A(k*1000);x.strokeStyle=k*1000>=o.mx?'#ff2b1c':'#3a3e4a';x.lineWidth=2;x.beginPath();
+    x.moveTo(cx+Math.cos(a)*(r-r*.08),cy+Math.sin(a)*(r-r*.08));x.lineTo(cx+Math.cos(a)*(r-r*.18),cy+Math.sin(a)*(r-r*.18));x.stroke();
+    x.fillText(k,cx+Math.cos(a)*(r-r*.29),cy+Math.sin(a)*(r-r*.29));}
+  const a=A(o.rpm);x.strokeStyle='#ff2b1c';x.lineWidth=Math.max(3,r*.025);x.lineCap='round';x.beginPath();
+  x.moveTo(cx+Math.cos(a)*r*.5,cy+Math.sin(a)*r*.5);x.lineTo(cx+Math.cos(a)*r*1.02,cy+Math.sin(a)*r*1.02);x.stroke();
+  x.fillStyle='#7c8191';x.font=`600 ${Math.round(r*.08)}px Barlow,system-ui`;x.fillText('×1000 giri/min',cx,cy-r*.5);
+}
+
+/* ================= le bozze ================= */
+const $=(root,s)=>root.querySelector(s);
+const DRAFTS=[
+ {id:'gara',name:'Gara',desc:'Marcia gigante al centro, shift light, velocità, delta e tempi. Il cruscotto di tutti i giorni.',
+  html:`<div class="d-gara" style="height:100%">
+   <div class="shift" style="grid-area:sh"></div>
+   <div class="gear"><div class="sg"></div><div class="v" data-k="g"></div><div class="rpmtxt"><span data-k="rpm"></span> giri</div></div>
+   <div class="cell" style="grid-area:sp"><span class="lbl">km/h</span><span class="v big" data-k="kmh"></span></div>
+   <div class="cell r" style="grid-area:dl"><span class="lbl">delta</span><span class="v big" data-k="d"></span></div>
+   <div class="secs" style="grid-area:sc"></div>
+   <div class="cell" style="grid-area:t1"><span class="lbl">giro <span data-k="lap"></span></span><span class="v tm" data-k="cur"></span></div>
+   <div class="cell r t2" style="grid-area:t2"><span class="lbl">migliore</span><span class="v tm" data-k="best"></span></div>
+   <div class="cell t3" style="grid-area:t3"><span class="lbl">ultimo</span><span class="v tm" data-k="last"></span></div>
+   <div class="cell r t4" style="grid-area:t4"><span class="lbl">carburante</span><span class="v tm" data-k="fl"></span></div>
+  </div>`,
+  update(r,o){shiftLights($(r,'.shift'),o,16);sectors($(r,'.secs'),o,false);
+   $(r,'.sg').textContent=o.sg?'▲ '+o.sg:'';}},
+ {id:'delta',name:'Delta',desc:'Il delta riempie lo schermo e si colora: verde se guadagni, rosso se perdi. Settori con i tempi.',
+  html:`<div class="d-delta" style="height:100%">
+   <div class="shift" style="grid-area:sh"></div>
+   <div class="hd"><span class="lbl">delta sul migliore</span><span class="v" data-k="d"></span>
+     <div class="mini"><span><b data-k="g"></b> marcia</span><span><b data-k="kmh"></b> km/h</span></div></div>
+   <div class="bar"><b></b></div>
+   <div class="secs" style="grid-area:sc"></div>
+   <div class="cell" style="grid-area:pr"><span class="lbl">giro previsto</span><span class="v x" data-k="pred"></span></div>
+   <div class="cell" style="grid-area:a"><span class="lbl">migliore</span><span class="v x" data-k="best"></span></div>
+   <div class="cell" style="grid-area:b"><span class="lbl">ultimo</span><span class="v x" data-k="last"></span></div>
+  </div>`,
+  update(r,o){shiftLights($(r,'.shift'),o,16);sectors($(r,'.secs'),o,true);
+   const d=o.d||0,k=Math.max(-1,Math.min(1,d/1000));
+   $(r,'.hd').style.backgroundColor=d<0?`rgba(34,214,106,${.08+Math.min(.35,-k*.35)})`:`rgba(255,43,28,${.08+Math.min(.35,k*.35)})`;
+   const b=$(r,'.bar b');b.style.background=d<0?'var(--green)':'var(--red)';
+   if(d<0){b.style.left=(50+k*50)+'%';b.style.width=(-k*50)+'%'}else{b.style.left='50%';b.style.width=(k*50)+'%'}}},
+ {id:'ana',name:'Analogico',desc:'Contagiri a lancetta con marcia e velocità dentro, attorno carburante, temperature e turbo.',
+  html:`<div class="d-ana" style="height:100%">
+   <div class="tc"><canvas></canvas><div class="in"><span class="v gv" data-k="g"></span><span class="v kv"><b data-k="kmh"></b><span>km/h</span></span></div></div>
+   <div class="cell" style="grid-area:a"><span class="lbl">carburante</span><span class="v x"><b data-k="fuel"></b><small>L</small></span></div>
+   <div class="cell" style="grid-area:b"><span class="lbl">giri rimasti</span><span class="v x" data-k="fl"></span></div>
+   <div class="cell" style="grid-area:c"><span class="lbl">turbo</span><span class="v x"><b data-k="boost"></b><small>bar</small></span></div>
+   <div class="cell r" style="grid-area:d"><span class="lbl">acqua</span><span class="v x"><b data-k="wt"></b><small>°C</small></span></div>
+   <div class="cell r" style="grid-area:e"><span class="lbl">olio</span><span class="v x"><b data-k="ot"></b><small>°C</small></span></div>
+   <div class="cell r" style="grid-area:f"><span class="lbl">pressione olio</span><span class="v x"><b data-k="oil"></b><small>bar</small></span></div>
+   <div class="hb" style="grid-area:fu"><b></b></div>
+  </div>`,
+  update(r,o){drawTach($(r,'canvas'),o);const b=$(r,'.hb b');b.style.width=(o.fuel/o.cap*100)+'%';b.style.background=o.fl<3?'var(--red)':'var(--cyan)';}},
+ {id:'ing',name:'Ingegnere',desc:'Gomme con temperatura e bloccaggi, cerchio delle forze G con scia, pedali prima e dopo ABS e TCS.',
+  html:`<div class="d-ing" style="height:100%">
+   <div class="hd"><span><span class="v" data-k="g"></span> <span class="lbl">marcia</span></span><span><span class="v" data-k="kmh"></span> <span class="lbl">km/h</span></span><span class="v" data-k="d"></span></div>
+   <div class="tys"><div class="tyre"></div><div class="tyre"></div><div class="tyre"></div><div class="tyre"></div></div>
+   <div class="gc"><canvas></canvas></div>
+   <div class="pd"><span class="lbl">pedali</span><div class="ped"><div class="t"><b></b><i class="o"></i></div><div class="k"><b></b><i class="o"></i></div></div></div>
+   <div class="ev"><b><span>uso grip</span><b data-k="gu"></b></b><b><span>bloccaggi</span><b data-k="lock"></b></b><b><span>pattinamenti</span><b data-k="spin"></b></b>
+     <b><span class="chip" data-c="abs">ABS</span> <span class="chip" data-c="tcs">TCS</span></b></div>
+  </div>`,
+  update(r,o){drawG($(r,'canvas'),o);
+   [...r.querySelectorAll('.tyre')].forEach((t,w)=>{
+     if(!t._v){t.innerHTML='<small></small><span class="v"></span><small></small>';t._v=t.children;}
+     t.style.background=tyreColor(o.tt[w]);t._v[0].textContent=['ANT SX','ANT DX','POST SX','POST DX'][w];
+     t._v[1].textContent=Math.round(o.tt[w])+'°';t._v[2].textContent='slitt. '+Math.round(o.sl[w])+'%';
+     t.classList.toggle('lock',o.ws[w]===2);t.classList.toggle('spin',o.ws[w]===3);});
+   const p=r.querySelectorAll('.ped>div');p[0].firstChild.style.height=o.thro+'%';p[0].lastChild.style.bottom=o.thr+'%';
+   p[1].firstChild.style.height=o.brko+'%';p[1].lastChild.style.bottom=o.brk+'%';
+   $(r,'[data-c=abs]').classList.toggle('on',!!o.abs);$(r,'[data-c=tcs]').classList.toggle('on',!!(o.f&2048));}},
+ {id:'map',name:'Circuito',desc:'Mappa con settori colorati e punti di frenata, conto alla rovescia alla prossima staccata.',
+  html:`<div class="d-map" style="height:100%">
+   <div class="secs" style="grid-area:sh"></div>
+   <div class="mp"><canvas></canvas></div>
+   <div class="bk"><div class="cell"><span class="lbl">prossima frenata</span><span class="v" data-k="nb"></span></div><div class="cell r"><span class="lbl">velocità curva</span><span class="v" data-k="nbk"></span></div></div>
+   <div class="cell" style="grid-area:g"><span class="lbl">marcia</span><span class="v x" data-k="g"></span></div>
+   <div class="cell" style="grid-area:k"><span class="lbl">km/h</span><span class="v x" data-k="kmh"></span></div>
+   <div class="cell" style="grid-area:d"><span class="lbl">delta</span><span class="v x" data-k="d"></span></div>
+  </div>`,
+  update(r,o){sectors($(r,'.secs'),o,false);const c=$(r,'canvas');drawMap(c,o,Math.max(4,c.clientWidth/70));
+   $(r,'.bk').classList.toggle('near',o.nb!=null&&o.nb<120);}},
+ {id:'min',name:'Essenziale',desc:'Solo shift light, marcia e delta, leggibili con la coda dell\'occhio. Per il telefono lontano.',
+  html:`<div class="d-min" style="height:100%">
+   <div class="shift" style="grid-area:sh"></div>
+   <div class="gear"><span class="v" data-k="g"></span></div>
+   <div class="dl"><span class="v" data-k="d"></span><span class="lbl">delta · giro <span data-k="lap"></span></span></div>
+  </div>`,
+  update(r,o){shiftLights($(r,'.shift'),o,10);}},
+];
+const FMT={g:o=>gr(o.g),kmh:o=>Math.round(o.kmh),rpm:o=>Math.round(o.rpm/10)*10,d:o=>dlt(o.d),cur:o=>lt(o.cur),best:o=>lt(o.best),last:o=>lt(o.last),
+  lap:o=>o.lap,fl:o=>o.fl==null?'--':o.fl.toFixed(1),fuel:o=>o.fuel.toFixed(1),boost:o=>(o.boost>=0?'+':'')+o.boost.toFixed(2),wt:o=>Math.round(o.wt),ot:o=>Math.round(o.ot),
+  oil:o=>o.oil.toFixed(1),gu:o=>Math.round(o.gu*100)+'%',lock:o=>o.lk[0],spin:o=>o.lk[1],nb:o=>o.nb==null?'--':Math.round(o.nb)+' m',nbk:o=>o.nbk==null?'--':Math.round(o.nbk),
+  pred:o=>o.best?lt(o.best+(o.d||0)):'-:--.---'};
+
+/* ================= montaggio e ciclo di disegno ================= */
+let sel=0,orient='por',targets=[];
+try{const s=+localStorage.getItem('gt7dash');if(s>=0&&s<DRAFTS.length)sel=s;}catch(e){}
+function mount(el,i){
+  el.innerHTML=DRAFTS[i].html;
+  el._binds=[...el.querySelectorAll('[data-k]')].map(n=>({n,k:n.dataset.k,last:null}));
+  el._draft=DRAFTS[i];
+}
+function paint(el,o){
+  for(const b of el._binds){const t=String(FMT[b.k](o));if(t!==b.last){b.n.textContent=t;b.last=t;
+    if(b.k==='d')b.n.className=b.n.className.replace(/ ?(pos|neg)/g,'')+(o.d==null?'':o.d<0?' pos':' neg');}}
+  el._draft.update(el,o);
+  el.classList.toggle('paused',!!o._paused);
+}
+function loop(now){const o=view(now);if(o)for(const t of targets)if(t.isConnected&&t._draft)paint(t,o);requestAnimationFrame(loop);}
+requestAnimationFrame(loop);
+
+const dash=document.getElementById('dash'),phone=document.getElementById('phone'),fit=document.getElementById('fit');
+const list=document.getElementById('drafts');
+DRAFTS.forEach((d,i)=>{const b=document.createElement('button');b.className='draft';b.innerHTML=`<span class="n"><i>${i+1}</i>${d.name}</span><span class="d">${d.desc}</span>`;
+  b.onclick=()=>choose(i);list.appendChild(b);});
+function choose(i){sel=i;try{localStorage.setItem('gt7dash',i)}catch(e){}
+  [...list.children].forEach((b,k)=>b.setAttribute('aria-pressed',k===i));mount(dash,i);if(!live.hidden)mount(liveDash,i);
+  document.getElementById('cap').textContent=`Bozza ${i+1} di ${DRAFTS.length} · ${orient==='por'?'verticale 390×810':'orizzontale 844×366'} punti utili sotto la barra di stato. Tocca lo schermo per mettere in pausa.`;}
+function setOrient(o){orient=o;phone.className='phone '+o;document.getElementById('o-por').setAttribute('aria-pressed',o==='por');document.getElementById('o-lan').setAttribute('aria-pressed',o==='lan');
+  dash.className='dash '+o;scale();choose(sel);}
+function scale(){phone.style.transform='';const w=phone.offsetWidth,h=phone.offsetHeight,avail=fit.clientWidth,maxH=Math.max(420,innerHeight-40);
+  const s=Math.min(1,avail/w,orient==='por'?maxH/h:1);phone.style.transform=`scale(${s})`;fit.style.height=(h*s)+'px';}
+addEventListener('resize',scale);
+document.getElementById('o-por').onclick=()=>setOrient('por');document.getElementById('o-lan').onclick=()=>setOrient('lan');
+dash.onclick=()=>SIM.togglePause();
+
+/* tutto schermo: niente barra simulata, quella vera del telefono resta sopra */
+const live=document.getElementById('live'),liveDash=document.createElement('div');liveDash.className='dash';live.prepend(liveDash);
+function liveOrient(){liveDash.className='dash '+(innerWidth>innerHeight?'lan':'por');}
+document.getElementById('go').onclick=async()=>{live.hidden=false;document.getElementById('page').hidden=true;liveOrient();mount(liveDash,sel);
+  try{await navigator.wakeLock?.request('screen')}catch(e){}
+  setTimeout(()=>document.getElementById('swipe').style.opacity=0,2500);};
+document.getElementById('exit').onclick=()=>{live.hidden=true;document.getElementById('page').hidden=false;scale();};
+addEventListener('resize',()=>{if(!live.hidden)liveOrient()});
+let sx=null;live.addEventListener('touchstart',e=>{sx=e.touches[0].clientX},{passive:true});
+live.addEventListener('touchend',e=>{if(sx==null)return;const dx=e.changedTouches[0].clientX-sx;sx=null;
+  if(Math.abs(dx)>50)choose((sel+(dx<0?1:DRAFTS.length-1))%DRAFTS.length);},{passive:true});
+document.addEventListener('keydown',e=>{if(live.hidden)return;if(e.key==='ArrowRight')choose((sel+1)%DRAFTS.length);if(e.key==='ArrowLeft')choose((sel+DRAFTS.length-1)%DRAFTS.length);if(e.key==='Escape')document.getElementById('exit').click();});
+
+function tick(){const d=new Date();document.getElementById('clock').textContent=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}
+tick();setInterval(tick,10000);
+targets=[dash,liveDash];
+setOrient('por');
+</script>
