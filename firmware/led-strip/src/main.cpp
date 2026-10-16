@@ -2,6 +2,7 @@
 #include <FastLED.h>
 #include <WiFiManager.h>
 #include <WebServer.h>
+#include <ESPmDNS.h>
 #include <Update.h>
 #include <FS.h>
 #include <LittleFS.h>
@@ -12,11 +13,15 @@
 #include "RaceTelemetry.h"
 #include "EventStream.h"
 #include "WebPage.h"
+#include "DashPage.h"
+#include "DashAssets.h"
 // Circuiti salvati: lo stesso codice dello schermo (firmware/dashboard/src)
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.0.0"
+#define LED_FIRMWARE_VERSION "2.1.0"
+// Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
+#define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
 // della striscia LED (vedi lib/OtaUpdate nel firmware dello schermo).
 static const char LED_FIRMWARE_TAG[] = OTA_TAG_PREFIX "led-lolin-s2-mini";
@@ -57,7 +62,8 @@ int32_t lastPacketId = -1;
 // ==================== WEB SERVER & UDP ====================
 OtaWebServer server(80);
 OtaWebUpdate *firmwareUpdate = nullptr;
-EventStream stream;
+EventStream stream;     // pagina della striscia: 20 fotogrammi al secondo
+EventStream dashStream; // cruscotto del telefono: uno per pacchetto di GT7
 WiFiUDP ledDiscoveryUdp;
 // Dopo l'esito di un aggiornamento la striscia lo mostra per un momento.
 bool ledHold = false;
@@ -130,6 +136,26 @@ void handleRoot()
     server.send_P(200, "text/html; charset=utf-8", WEB_PAGE, sizeof(WEB_PAGE) - 1);
 }
 
+// Il cruscotto del telefono e i suoi file (icone, font, video per tenere
+// acceso lo schermo): non cambiano finché non cambia il firmware.
+void handleDash()
+{
+    server.sendHeader("Cache-Control", "no-cache");
+    server.send_P(200, "text/html; charset=utf-8", DASH_PAGE, sizeof(DASH_PAGE) - 1);
+}
+
+void handleDashManifest()
+{
+    server.sendHeader("Cache-Control", "no-cache");
+    server.send_P(200, "application/manifest+json", DASH_MANIFEST, sizeof(DASH_MANIFEST) - 1);
+}
+
+static void sendAsset(const char *type, const uint8_t *data, size_t size)
+{
+    server.sendHeader("Cache-Control", "public, max-age=604800");
+    server.send_P(200, type, reinterpret_cast<PGM_P>(data), size);
+}
+
 static void sendJson(JsonOut &j)
 {
     server.sendHeader("Cache-Control", "no-store");
@@ -147,6 +173,7 @@ void handleApiStatus()
     j.beginObject();
     j.flag("wifi", WiFi.status() == WL_CONNECTED);
     j.text("ip", WiFi.localIP().toString().c_str());
+    j.text("host", LED_HOSTNAME ".local");
     j.key("gt7").boolean(race.racing(now));
     j.field("rpm", race.live(now) ? p.rpm : 0.0f, 0);
     j.field("maxRpm", race.live(now) ? p.maxAlertRpm : 0.0f, 0);
@@ -178,7 +205,7 @@ void handleApiStatus()
     j.field("heap", static_cast<long long>(ESP.getFreeHeap()));
     j.field("psram", static_cast<long long>(ESP.getFreePsram()));
     j.field("tracks", static_cast<long long>(trackFilesReady ? trackStore.trackCount() : -1));
-    j.field("clients", static_cast<long long>(stream.count()));
+    j.field("clients", static_cast<long long>(stream.count() + dashStream.count()));
     j.endObject();
     sendJson(j);
 }
@@ -285,6 +312,7 @@ void handleApiReset()
 }
 
 void handleEvents() { stream.accept(server); }
+void handleDashEvents() { dashStream.accept(server); }
 
 void handleRestart()
 {
@@ -421,6 +449,7 @@ void setup()
 
     // WiFiManager: crea AP "GT7_LED_Config" se non trova rete nota
     WiFiManager wm;
+    wm.setHostname(LED_HOSTNAME);
     wm.setConfigPortalTimeout(120); // Timeout 2 minuti
     if (!wm.autoConnect("GT7_LED_Config"))
     {
@@ -446,10 +475,26 @@ void setup()
     server.on("/api/reset", handleApiReset);
     server.on("/api/events", handleEvents);
     server.on("/restart", handleRestart);
+    // Cruscotto del telefono
+    server.on("/cruscotto", handleDash);
+    server.on("/api/dash", handleDashEvents);
+    server.on("/manifest.webmanifest", handleDashManifest);
+    server.on("/icon-192.png", [] { sendAsset("image/png", DASH_ICON_192, sizeof(DASH_ICON_192)); });
+    server.on("/icon-512.png", [] { sendAsset("image/png", DASH_ICON_512, sizeof(DASH_ICON_512)); });
+    server.on("/apple-touch-icon.png", [] { sendAsset("image/png", DASH_ICON_180, sizeof(DASH_ICON_180)); });
+    server.on("/cruscotto/num-b.woff2", [] { sendAsset("font/woff2", DASH_FONT_BOLD, sizeof(DASH_FONT_BOLD)); });
+    server.on("/cruscotto/num-s.woff2", [] { sendAsset("font/woff2", DASH_FONT_SEMIBOLD, sizeof(DASH_FONT_SEMIBOLD)); });
+    server.on("/cruscotto/sveglia.mp4", [] { sendAsset("video/mp4", DASH_WAKE_MP4, sizeof(DASH_WAKE_MP4)); });
+    server.on("/cruscotto/sveglia.webm", [] { sendAsset("video/webm", DASH_WAKE_WEBM, sizeof(DASH_WAKE_WEBM)); });
     const OtaWebUpdate::Config update = {"GT7 LED", LED_FIRMWARE_TAG, LED_FIRMWARE_VERSION, GT7_OTA_PASSWORD};
     firmwareUpdate = OtaWebUpdate::attach(server, update, showFirmwareUpdate);
     server.begin();
     Serial.println("Web Server attivo su http://" + WiFi.localIP().toString());
+    if (MDNS.begin(LED_HOSTNAME))
+    {
+        MDNS.addService("http", "tcp", 80);
+        Serial.println("Anche su http://" LED_HOSTNAME ".local (cruscotto: /cruscotto)");
+    }
     // Sul Wi-Fi con la pagina di aggiornamento: questo firmware va bene.
     OtaWebUpdate::confirmRunningFirmware();
 
@@ -499,7 +544,38 @@ void loop()
         FastLED.show();
     }
 
-    // Telemetria in diretta per la pagina web: 20 volte al secondo, i colori 5
+    // Telemetria in diretta. Pagina della striscia: 20 volte al secondo, i
+    // colori 5. Cruscotto: a ogni pacchetto nuovo di GT7 (60 al secondo), 4
+    // volte al secondo senza GT7 perché il telefono sappia di essere collegato.
+    // Il fotogramma si scrive una volta sola anche se serve a tutti e due.
+    static char frameJson[1600];
+    static size_t frameLength = 0;
+    static uint32_t frameAt = 0;
+    static bool frameValid = false;
+    auto frameNow = [&]() -> bool
+    {
+        if (!frameValid || frameAt != now)
+        {
+            JsonOut j(frameJson, sizeof(frameJson));
+            race.writeFrame(j, now);
+            frameValid = j.ok();
+            frameLength = j.length();
+            frameAt = now;
+        }
+        return frameValid;
+    };
+    if (dashStream.count() > 0)
+    {
+        static int32_t dashPacket = -1;
+        static uint32_t lastDash = 0;
+        const bool fresh = lastPacketId != dashPacket;
+        if ((fresh && now - lastDash >= 14) || now - lastDash >= 250)
+        {
+            dashPacket = lastPacketId;
+            lastDash = now;
+            if (frameNow()) dashStream.send("t", frameJson, frameLength);
+        }
+    }
     if (stream.count() > 0)
     {
         static uint32_t lastStream = 0, lastColors = 0;
@@ -507,9 +583,7 @@ void loop()
         if (now - lastStream >= 50)
         {
             lastStream = now;
-            JsonOut j(buffer, sizeof(buffer));
-            race.writeFrame(j, now);
-            if (j.ok()) stream.send("t", j.c_str(), j.length());
+            if (frameNow()) stream.send("t", frameJson, frameLength);
         }
         if (now - lastColors >= 200)
         {
