@@ -14,6 +14,13 @@ public:
     operator uint32_t() const { return v_[0] | v_[1] << 8 | v_[2] << 16 | (uint32_t)v_[3] << 24; }
     bool operator==(const IPAddress &o) const { return memcmp(v_, o.v_, 4) == 0; }
     bool operator!=(const IPAddress &o) const { return !(*this == o); }
+    bool fromString(const String &text)
+    {
+        unsigned a, b, c, d;
+        if (sscanf(text.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) return false;
+        v_[0] = a; v_[1] = b; v_[2] = c; v_[3] = d;
+        return true;
+    }
     String toString() const
     {
         char buf[16];

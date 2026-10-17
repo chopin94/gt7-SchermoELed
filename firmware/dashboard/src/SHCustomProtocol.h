@@ -922,6 +922,9 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
                         if (!ledStripFound || ledStripIP != newIP) {
                             ledStripIP = newIP;
                             ledStripFound = true;
+                            // F1 25 sent to the screen alone reaches the strip too
+                            IPAddress stripAddress;
+                            if (stripAddress.fromString(newIP)) f1Telem.setRelay(stripAddress);
                             fetchLedSettings();
                         }
                     }
@@ -2179,14 +2182,14 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 	// GT7 / F1 25 mode: one line above the address with what arrives from
 	// F1 25, so a wrong setting in the game is seen at once.
-	char lastF1Line[48] = {};
+	char lastF1Line[64] = {};
 	uint32_t lastF1LineMs = 0;
 	void drawF1Diagnostics()
 	{
 		if (telemetry.mode != TelemetryMode::GT7 || WiFi.status() != WL_CONNECTED) return;
 		if (lastF1Line[0] && millis() - lastF1LineMs < 1000) return;
 		lastF1LineMs = millis();
-		char line[48];
+		char line[64];
 		f1Telem.describe(line, sizeof(line));
 		if (strcmp(line, lastF1Line) == 0) return;
 		strcpy(lastF1Line, line);

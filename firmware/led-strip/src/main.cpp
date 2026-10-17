@@ -20,7 +20,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.3.1"
+#define LED_FIRMWARE_VERSION "2.3.2"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -67,6 +67,9 @@ int32_t lastGt7PacketId = -1;
 // Ascoltato insieme a GT7 sulla porta 20777: in F1 25 Impostazioni >
 // Telemetria, UDP attiva e trasmissione (broadcast) attiva, formato 2025.
 F1UdpReceiver f1Telem;
+// Le copie che lo schermo inoltra quando F1 25 manda i dati solo a lui
+// (broadcast spento): usate solo se dal gioco non arriva niente qui.
+F1UdpReceiver f1Relay(F1UdpReceiver::RELAY_PORT);
 
 // ==================== WEB SERVER & UDP ====================
 OtaWebServer server(80);
@@ -259,8 +262,8 @@ void handleApiStatus()
     j.field("fixedNets", static_cast<long long>(savedNetworks));
     j.text("suggest", suggestedAddress().toString().c_str());
     j.key("gt7").boolean(race.racing(now));
-    char f1State[48];
-    f1Telem.describe(f1State, sizeof(f1State));
+    char f1State[64];
+    (f1Telem.live(3000) || !f1Relay.live(3000) ? f1Telem : f1Relay).describe(f1State, sizeof(f1State));
     j.text("f1", f1State); // cosa arriva da F1 25: si vede subito un'impostazione sbagliata
     j.field("rpm", race.live(now) ? p.rpm : 0.0f, 0);
     j.field("maxRpm", race.live(now) ? p.maxAlertRpm : 0.0f, 0);
@@ -552,6 +555,13 @@ static void readTelemetry()
         Race::fromF1(car, p);
         useSample(p);
     }
+    for (int k = 0; k < 8 && f1Relay.poll(car); ++k)
+    {
+        if (f1Telem.live(1500)) continue;
+        Race::Packet p;
+        Race::fromF1(car, p);
+        useSample(p);
+    }
 }
 
 // ==================== SETUP ====================
@@ -646,6 +656,7 @@ void setup()
     gt7Telem.begin(playstationIP, packetVersion);
     gt7Telem.sendHeartbeat();
     f1Telem.begin();
+    f1Relay.begin();
 }
 
 // ==================== LOOP ====================

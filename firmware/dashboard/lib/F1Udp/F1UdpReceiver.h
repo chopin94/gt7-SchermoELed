@@ -1,16 +1,26 @@
 #pragma once
 #include <Arduino.h>
 #include <stdio.h>
+#include <WiFi.h>
 #include <WiFiUdp.h>
 #include "F1Decoder.h"
 
 // Listens to F1 25 on UDP 20777 (broadcast or sent to this address) and
 // hands over the player's car, one sample per car telemetry packet.
+// The screen can pass every datagram on to the LED strip (setRelay): then
+// F1 25 may send to the screen's address alone, without broadcast, which
+// some routers do not carry from the console to Wi-Fi. The copies go to
+// RELAY_PORT, so the strip tells them from what it receives itself.
 class F1UdpReceiver
 {
 public:
-    void begin() { udp.begin(F1Udp::PORT); }
+    static constexpr uint16_t RELAY_PORT = 20778;
+
+    explicit F1UdpReceiver(uint16_t listenPort = F1Udp::PORT) : port(listenPort) {}
+    void begin() { udp.begin(port); }
     void stop() { udp.stop(); }
+    // Where to copy the datagrams from the game (none: IPAddress()).
+    void setRelay(const IPAddress &address) { relay = address; }
 
     // Reads the waiting datagrams until a new sample is complete. Call it
     // again until it returns false: the lap analysis wants every sample.
@@ -23,6 +33,12 @@ public:
             const int length = udp.read(buffer, sizeof(buffer));
             if (length <= 0 || size > static_cast<int>(sizeof(buffer))) continue;
             countDatagram(length);
+            if (relay != IPAddress() && udp.remoteIP() != relay)
+            {
+                udp.beginPacket(relay, RELAY_PORT);
+                udp.write(buffer, static_cast<size_t>(length));
+                udp.endPacket();
+            }
             if (decoder.feed(buffer, static_cast<size_t>(length), millis(), car))
             {
                 lastSampleMs = millis();
@@ -45,7 +61,7 @@ public:
         countDatagram(0);
         const bool recent = datagramsEver && millis() - lastDatagramMs < 3000;
         if (!datagramsEver || !recent)
-            snprintf(out, size, "F1 25: nessun dato sulla porta %u", F1Udp::PORT);
+            snprintf(out, size, "F1 25 nessun dato - IP %s porta %u", WiFi.localIP().toString().c_str(), port);
         else if (lastFormat < 2024 || lastFormat > 2026)
             snprintf(out, size, "F1 25: formato UDP %u, scegli 2025", lastFormat);
         else if (!live(3000))
@@ -60,6 +76,8 @@ public:
 
 private:
     WiFiUDP udp;
+    uint16_t port;
+    IPAddress relay;
     F1Udp::Decoder decoder;
     uint8_t buffer[F1Udp::MAX_PACKET];
     uint32_t lastSampleMs = 0;
