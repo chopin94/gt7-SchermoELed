@@ -406,7 +406,12 @@ function renderMenu(){const p=document.getElementById('pick');
  p.querySelectorAll('button').forEach(b=>b.onclick=()=>{choose(+b.dataset.i);toggleMenu(true)});
  const app=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone;
  document.getElementById('info').innerHTML='In <b>'+(orient==='por'?'verticale':'orizzontale')+'</b> si apre <b>'+DRAFTS[sel].name+'</b>: verticale e orizzontale ricordano ognuno il proprio cruscotto.'+
-  (app?'':' Per avere solo la barra di stato nera sopra al cruscotto, senza le barre del browser: menu del browser → <b>Aggiungi a schermata Home</b>.')}
+  (app?'':' Per avere solo la barra di stato nera sopra al cruscotto, senza le barre del browser: menu del browser → <b>Aggiungi a schermata Home</b>.')+
+  (fixedNote?' '+fixedNote:'')}
+// Without a fixed address the icon on the home screen stops working when the
+// address changes: say so in the menu (once per page load).
+let fixedNote='';
+fetch('/api/status').then(r=>r.json()).then(s=>{if(!s.fixed){fixedNote='L\'indirizzo della striscia ('+s.ip+') può cambiare: prima di aggiungere alla Home fissalo in <b>Telemetria completa → Sistema → Indirizzo fisso</b>.';renderMenu()}}).catch(()=>{});
 document.getElementById('close').onclick=()=>toggleMenu(false);
 document.getElementById('fs').onclick=()=>{const d=document.documentElement;
  if(document.fullscreenElement){document.exitFullscreen().catch(()=>{})}

@@ -19,7 +19,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.1.1"
+#define LED_FIRMWARE_VERSION "2.2.0"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -69,6 +69,60 @@ WiFiUDP ledDiscoveryUdp;
 bool ledHold = false;
 unsigned long ledHoldStart = 0;
 unsigned long bootMs = 0;
+
+// ==================== INDIRIZZO FISSO ====================
+// Scelto dalla pagina Sistema, uno per rete (fino a 4): vale solo sulla rete
+// con lo stesso nome, router e maschera di quando è stato scelto. Così due
+// hotspot con lo stesso nome (un iPhone e un Android) non si confondono, e
+// su una rete che cambia indirizzi a ogni accensione resta quello del router.
+// Serve dove i nomi .local non funzionano e l'indirizzo cambia, come
+// l'hotspot dell'iPhone, perché il cruscotto aggiunto alla Home lo ricorda.
+static constexpr int FIXED_SLOTS = 4;
+bool fixedAddressActive = false;
+
+static String fixedKey(int slot, const char *name) { return String("fx") + slot + "_" + name; }
+
+// Il posto dell'indirizzo fisso per la rete attuale, -1 se non c'è.
+static int fixedSlot()
+{
+    for (int i = 0; i < FIXED_SLOTS; ++i)
+        if (preferences.getUInt(fixedKey(i, "ip").c_str(), 0) &&
+            preferences.getString(fixedKey(i, "ssid").c_str(), "") == WiFi.SSID() &&
+            preferences.getUInt(fixedKey(i, "gw").c_str(), 0) == uint32_t(WiFi.gatewayIP()) &&
+            preferences.getUInt(fixedKey(i, "mk").c_str(), 0) == uint32_t(WiFi.subnetMask()))
+            return i;
+    return -1;
+}
+
+static void clearFixedSlot(int slot)
+{
+    for (const char *name : {"ssid", "ip", "gw", "mk"}) preferences.remove(fixedKey(slot, name).c_str());
+}
+
+// Hotspot dell'iPhone: rete 172.20.10.0/28, gli indirizzi si danno da .2 in
+// su in ordine di collegamento, quindi .14 è l'ultimo che l'iPhone usa.
+static IPAddress suggestedAddress()
+{
+    if (WiFi.gatewayIP() == IPAddress(172, 20, 10, 1) && WiFi.subnetMask() == IPAddress(255, 255, 255, 240))
+        return IPAddress(172, 20, 10, 14);
+    return WiFi.localIP();
+}
+
+// Dopo la connessione con DHCP: se per questa rete c'è un indirizzo fisso,
+// passa a quello (il DHCP si ferma e l'indirizzo resta anche ai ricollegamenti).
+static void applyFixedAddress()
+{
+    const int slot = fixedSlot();
+    if (slot < 0) return;
+    const IPAddress ip(preferences.getUInt(fixedKey(slot, "ip").c_str(), 0));
+    if (WiFi.config(ip, WiFi.gatewayIP(), WiFi.subnetMask(), WiFi.dnsIP()))
+    {
+        fixedAddressActive = true;
+        Serial.print("Indirizzo fisso: ");
+        Serial.println(WiFi.localIP());
+    }
+    else Serial.println("Indirizzo fisso non applicato: resta quello del router");
+}
 
 // ==================== IMPOSTAZIONI ====================
 static void applyLayout(const LedFx::Layout &layout)
@@ -168,12 +222,20 @@ void handleApiStatus()
     const LedFx::Layout &l = effects.layout();
     const Race::Packet &p = race.packet();
     const uint32_t now = millis();
-    static char buffer[1024];
+    static char buffer[1400];
     JsonOut j(buffer, sizeof(buffer));
     j.beginObject();
     j.flag("wifi", WiFi.status() == WL_CONNECTED);
     j.text("ip", WiFi.localIP().toString().c_str());
     j.text("host", LED_HOSTNAME ".local");
+    j.text("ssid", WiFi.SSID().c_str());
+    j.text("gw", WiFi.gatewayIP().toString().c_str());
+    j.text("mask", WiFi.subnetMask().toString().c_str());
+    j.flag("fixed", fixedAddressActive);
+    int savedNetworks = 0;
+    for (int i = 0; i < FIXED_SLOTS; ++i) savedNetworks += preferences.getUInt(fixedKey(i, "ip").c_str(), 0) ? 1 : 0;
+    j.field("fixedNets", static_cast<long long>(savedNetworks));
+    j.text("suggest", suggestedAddress().toString().c_str());
     j.key("gt7").boolean(race.racing(now));
     j.field("rpm", race.live(now) ? p.rpm : 0.0f, 0);
     j.field("maxRpm", race.live(now) ? p.maxAlertRpm : 0.0f, 0);
@@ -313,6 +375,41 @@ void handleApiReset()
 
 void handleEvents() { stream.accept(server); }
 void handleDashEvents() { dashStream.accept(server); }
+
+// /api/network?ip=a.b.c.d fissa l'indirizzo su questa rete, ?ip=auto la
+// riporta all'indirizzo del router. La striscia si riavvia per usarlo.
+void handleApiNetwork()
+{
+    const String value = server.arg("ip");
+    int slot = fixedSlot();
+    if (value == "auto")
+    {
+        if (slot >= 0) clearFixedSlot(slot);
+    }
+    else
+    {
+        IPAddress ip;
+        const uint32_t mask = WiFi.subnetMask(), net = uint32_t(WiFi.localIP()) & mask;
+        if (!ip.fromString(value) || (uint32_t(ip) & mask) != net || ip == WiFi.gatewayIP() ||
+            (uint32_t(ip) & ~mask) == 0 || (uint32_t(ip) & ~mask) == ~mask)
+        {
+            server.send(400, "text/plain", "Indirizzo non valido per questa rete (" + WiFi.localIP().toString() + " / " +
+                                               WiFi.subnetMask().toString() + ")");
+            return;
+        }
+        // Il posto di questa rete, se no uno libero, se no il primo
+        for (int i = 0; i < FIXED_SLOTS && slot < 0; ++i)
+            if (!preferences.getUInt(fixedKey(i, "ip").c_str(), 0)) slot = i;
+        if (slot < 0) slot = 0;
+        preferences.putString(fixedKey(slot, "ssid").c_str(), WiFi.SSID());
+        preferences.putUInt(fixedKey(slot, "ip").c_str(), uint32_t(ip));
+        preferences.putUInt(fixedKey(slot, "gw").c_str(), uint32_t(WiFi.gatewayIP()));
+        preferences.putUInt(fixedKey(slot, "mk").c_str(), mask);
+    }
+    server.send(200, "text/plain", "OK");
+    delay(500);
+    ESP.restart();
+}
 
 void handleRestart()
 {
@@ -463,6 +560,7 @@ void setup()
     // la scheda dorme tra un beacon e l'altro, perde le domande mDNS di
     // gt7led.local e ritarda pacchetti di GT7 e flussi verso il telefono.
     WiFi.setSleep(false);
+    applyFixedAddress();
 
     // Mostra verde
     fill_solid(leds, activeLeds, CRGB::Green);
@@ -479,6 +577,7 @@ void setup()
     server.on("/api/reset", handleApiReset);
     server.on("/api/events", handleEvents);
     server.on("/restart", handleRestart);
+    server.on("/api/network", handleApiNetwork);
     // Cruscotto del telefono
     server.on("/cruscotto", handleDash);
     server.on("/api/dash", handleDashEvents);

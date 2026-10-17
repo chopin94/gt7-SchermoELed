@@ -12,6 +12,13 @@ static const char WEB_PAGE[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0c10">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="GT7 LED">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon-192.png">
 <title>GT7 LED Telemetria</title>
 <style>
 :root{--bg:#0b0c10;--card:#14161c;--line:#252832;--text:#e8e9ee;--dim:#8b8f9c;--red:#e10600;--green:#16c45a;--yellow:#ffc400;--purple:#b04dff;--blue:#2f8cff;--orange:#ff7a00}
@@ -77,7 +84,7 @@ label.chk{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-botto
 label.chk input{margin-top:3px;accent-color:var(--red);width:16px;height:16px}label.chk span{font-size:12px;color:var(--dim);display:block}
 .field{margin:10px 0}.field>span{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:4px}
 input[type=range]{width:100%;accent-color:var(--red)}
-input[type=number],select{width:100%;padding:9px;background:#1b1e26;color:var(--text);border:1px solid var(--line);border-radius:8px;font:inherit}
+input[type=number],input[type=text],select{width:100%;padding:9px;background:#1b1e26;color:var(--text);border:1px solid var(--line);border-radius:8px;font:inherit}
 input[type=color]{width:100%;height:38px;border:0;background:none;padding:0}
 .three{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 #preview{width:100%;height:auto;max-height:340px;display:block}
@@ -259,6 +266,16 @@ input[type=color]{width:100%;height:38px;border:0;background:none;padding:0}
   <div class="card c6">
    <h2>Dispositivo</h2>
    <div class="kv" id="sysinfo"></div>
+  </div>
+  <div class="card c6">
+   <h2>Indirizzo fisso</h2>
+   <p class="note" id="netinfo" style="margin-top:0"></p>
+   <div class="row" style="margin-top:10px">
+    <input type="text" id="fixip" inputmode="decimal" autocomplete="off" spellcheck="false" style="flex:1 1 150px;width:auto" aria-label="Indirizzo fisso">
+    <button class="btn" id="fixset">Usa sempre questo</button>
+    <button class="btn sec2" id="fixauto">Torna automatico</button>
+   </div>
+   <p class="note">Con l'indirizzo fisso il cruscotto aggiunto alla schermata Home si apre sempre, anche dove <b>gt7led.local</b> non funziona (l'hotspot dell'iPhone). Vale solo per questa rete (stesso nome e stesso router, fino a 4 reti ricordate): su un'altra, o su un hotspot che cambia indirizzi a ogni accensione, la striscia usa quello dato dal router. Sull'hotspot dell'iPhone il suggerito è 172.20.10.14, l'ultimo che l'iPhone assegna. Su un router di casa scegline uno fuori dagli indirizzi che il router distribuisce, oppure riservalo nel router.</p>
   </div>
   <div class="card c6">
    <h2>Manutenzione</h2>
@@ -473,8 +490,20 @@ function drawPreview(){const sv=$('preview');if(!S.right&&S.right!==0)return;
  pos.forEach((p,i)=>{const c=ledColors.length>=6*(i+1)?'#'+ledColors.substr(6*i,6):'#2a2e3a';h+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="'+r+'" fill="'+c+'"/>'});
  if(pos.length)h+='<text x="'+pos[0][0]+'" y="'+(pos[0][1]+16)+'" fill="#8b8f9c" font-size="10" text-anchor="middle">inizio</text>';
  sv.innerHTML=h;setText('ledinfo',THEMES[S.theme]?'tema '+THEMES[S.theme][0]+' · '+n+' LED':'')}
-function loadStatus(){api('/api/status').then(r=>r.json()).then(s=>{S=s;showSettings();
+function loadStatus(){api('/api/status').then(r=>r.json()).then(s=>{S=s;showSettings();showNet(s);
  const up=s.uptime|0;$('sysinfo').innerHTML=[['Firmware',s.fw],['Indirizzo',s.ip],['Nome in rete',s.host?'<a href="http://'+s.host+'" style="color:inherit">'+s.host+'</a>':'-'],['Segnale Wi-Fi',s.rssi+' dBm'],['Acceso da',Math.floor(up/3600)+' h '+Math.floor(up%3600/60)+' min'],['Memoria libera',Math.round(s.heap/1024)+' KB'],['PSRAM libera',Math.round((s.psram||0)/1024)+' KB'],['Circuiti salvati',s.tracks<0?'memoria non disponibile':s.tracks],['Pagine collegate',s.clients]].map(v=>'<div><span>'+v[0]+'</span><b>'+v[1]+'</b></div>').join('')}).catch(()=>{})}
+// ---------- fixed address
+function showNet(s){
+ setText('netinfo',s.fixed?'La striscia usa sempre '+s.ip+' sulla rete '+s.ssid+'.':
+  'Indirizzo dato dal router: '+s.ip+' sulla rete '+s.ssid+'. Può cambiare a ogni accensione.'+
+  (s.fixedNets?' Indirizzi fissi salvati per altre reti: '+s.fixedNets+'.':''));
+ const f=$('fixip');if(!f.dataset.edited&&document.activeElement!==f)f.value=s.fixed?s.ip:s.suggest}
+$('fixip').oninput=()=>{$('fixip').dataset.edited=1};
+function moveTo(q,url,msg){api('/api/network?ip='+q).then(()=>{toast(msg);setTimeout(()=>{if(url)location.href=url},7000)})
+ .catch(r=>r&&r.text?r.text().then(toast):toast('Striscia non raggiungibile'))}
+$('fixset').onclick=()=>{const ip=$('fixip').value.trim();if(!/^\d{1,3}(\.\d{1,3}){3}$/.test(ip))return toast('Scrivi un indirizzo come 172.20.10.14');
+ moveTo(ip,'http://'+ip+'/','Riavvio su '+ip+': la pagina si riapre lì')};
+$('fixauto').onclick=()=>moveTo('auto',null,'Riavvio con l\'indirizzo del router: lo vedi sullo schermo, nel menu LED');
 buildLed();loadStatus();setInterval(()=>{if(document.querySelector('#tab-sys.sel'))loadStatus()},5000);
 </script>
 </body>
