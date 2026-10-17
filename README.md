@@ -88,6 +88,8 @@ Nel gioco: **Impostazioni → Telemetria**
 | Formato UDP | 2025 (vanno bene anche 2024 e, con il Season Pack, 2026) |
 | Telemetria dell'auto | Pubblica, se giochi online |
 
+Se la riga gialla sulla schermata di attesa resta su *nessun dato*, il broadcast non arriva (alcuni router non lo passano dalla console al Wi-Fi): spegni la modalità broadcast e scrivi come **indirizzo IP** quello della striscia (meglio, se ha l'indirizzo fisso: sull'hotspot dell'iPhone 172.20.10.14) oppure quello dello schermo (è nella stessa riga). Schermo e striscia si inoltrano i dati sulla porta 20778, quindi ricevono comunque tutti e due; lo schermo saluta la striscia ogni 2 secondi perché sappia a chi inoltrare (campo `screen` di `/api/status`).
+
 Sullo schermo la connessione è **GT7 / F1 25** (la stessa di GT7: ascolta i due giochi insieme). La striscia ascolta sempre tutti e due. Il contagiri usa le luci di cambiata del gioco: dove si accende la prima e dove si accendono tutte lo impara nei primi allunghi. Sullo schermo la posizione mostrata è quella in gara; i circuiti salvati sono per scuderia. Il decodificatore ([`lib/F1Udp`](firmware/dashboard/lib/F1Udp/F1Decoder.h)) è condiviso dai due firmware e provato da [test](firmware/dashboard/tests/f1_decoder.cpp) con pacchetti costruiti byte per byte e da una gara simulata che passa per l'analisi della striscia.
 
 > **Assetto Corsa Competizione** ed **EA Sports WRC** su PS5 non trasmettono telemetria: nessun cruscotto esterno può leggerli. Assetto Corsa (il primo) e F1 25 sì.

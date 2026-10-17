@@ -1,16 +1,38 @@
 #pragma once
 #include <Arduino.h>
 #include <stdio.h>
+#include <string.h>
+#include <WiFi.h>
 #include <WiFiUdp.h>
 #include "F1Decoder.h"
 
 // Listens to F1 25 on UDP 20777 (broadcast or sent to this address) and
 // hands over the player's car, one sample per car telemetry packet.
+// Screen and LED strip pass every datagram from the game on to each other
+// (setRelay): then F1 25 may send to one address alone, without broadcast,
+// which some networks do not carry. The copies go to RELAY_PORT, so each
+// device tells them from what it receives itself and uses them only when
+// nothing arrives directly. The screen says hello on RELAY_PORT every two
+// seconds, so the strip learns where the screen is (peer()).
 class F1UdpReceiver
 {
 public:
-    void begin() { udp.begin(F1Udp::PORT); }
+    static constexpr uint16_t RELAY_PORT = 20778;
+
+    explicit F1UdpReceiver(uint16_t listenPort = F1Udp::PORT) : port(listenPort) {}
+    void begin() { udp.begin(port); }
     void stop() { udp.stop(); }
+    // Where to copy the datagrams from the game (none: IPAddress()).
+    void setRelay(const IPAddress &address) { relay = address; }
+    // The screen to the strip: "here I am, copy F1 25 to me too".
+    void sayHello(const IPAddress &address)
+    {
+        udp.beginPacket(address, RELAY_PORT);
+        udp.write(reinterpret_cast<const uint8_t *>(hello()), HELLO_LENGTH);
+        udp.endPacket();
+    }
+    // Who said hello in the last 10 seconds (IPAddress() if nobody).
+    IPAddress peer() const { return peerSeen && millis() - peerMs < 10000 ? peerAddress : IPAddress(); }
 
     // Reads the waiting datagrams until a new sample is complete. Call it
     // again until it returns false: the lap analysis wants every sample.
@@ -22,7 +44,20 @@ public:
             if (size <= 0) return false;
             const int length = udp.read(buffer, sizeof(buffer));
             if (length <= 0 || size > static_cast<int>(sizeof(buffer))) continue;
+            if (length == HELLO_LENGTH && memcmp(buffer, hello(), HELLO_LENGTH) == 0)
+            {
+                peerAddress = udp.remoteIP();
+                peerMs = millis();
+                peerSeen = true;
+                continue;
+            }
             countDatagram(length);
+            if (relay != IPAddress() && udp.remoteIP() != relay)
+            {
+                udp.beginPacket(relay, RELAY_PORT);
+                udp.write(buffer, static_cast<size_t>(length));
+                udp.endPacket();
+            }
             if (decoder.feed(buffer, static_cast<size_t>(length), millis(), car))
             {
                 lastSampleMs = millis();
@@ -45,7 +80,7 @@ public:
         countDatagram(0);
         const bool recent = datagramsEver && millis() - lastDatagramMs < 3000;
         if (!datagramsEver || !recent)
-            snprintf(out, size, "F1 25: nessun dato sulla porta %u", F1Udp::PORT);
+            snprintf(out, size, "F1 25 nessun dato - IP %s porta %u", WiFi.localIP().toString().c_str(), port);
         else if (lastFormat < 2024 || lastFormat > 2026)
             snprintf(out, size, "F1 25: formato UDP %u, scegli 2025", lastFormat);
         else if (!live(3000))
@@ -59,7 +94,13 @@ public:
     }
 
 private:
+    static const char *hello() { return "GT7DASH-F1"; }
+    static const int HELLO_LENGTH = 10;
     WiFiUDP udp;
+    uint16_t port;
+    IPAddress relay, peerAddress;
+    uint32_t peerMs = 0;
+    bool peerSeen = false;
     F1Udp::Decoder decoder;
     uint8_t buffer[F1Udp::MAX_PACKET];
     uint32_t lastSampleMs = 0;

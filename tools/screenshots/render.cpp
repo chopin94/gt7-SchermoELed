@@ -20,6 +20,7 @@ HostWiFi WiFi;
 GT7_UDP_Parser gt7Telem;
 Packet gt7Packet;
 F1UdpReceiver f1Telem;
+F1UdpReceiver f1Relay(F1UdpReceiver::RELAY_PORT);
 ACUdpTelemetry acTelem;
 
 // SimHub USB serial (FlowSerial in main.cpp) is not used for screenshots.

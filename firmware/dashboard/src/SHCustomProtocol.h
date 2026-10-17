@@ -1041,16 +1041,43 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 	// the themes, the lap analysis and the saved circuits work as with GT7.
 	bool readF1Wifi(DashboardState &state)
 	{
+		// Copies to the strip, and hello so the strip copies to us.
+		static uint32_t lastHello = 0;
+		if (millis() - lastHello >= 2000)
+		{
+			lastHello = millis();
+			const IPAddress strip = ledStripAddress();
+			f1Telem.setRelay(strip);
+			if (strip != IPAddress()) f1Telem.sayHello(strip);
+		}
 		bool updated = false;
 		F1Udp::Car car;
-		while (f1Telem.poll(car))
-		{
-			if (!telemetry.gt7.alive(millis())) { derivedMetrics.reset(); resetLapDifference(); }
-			fillF1Packet(car, gt7Packet.packetContent);
-			f1Source = true;
-			updated = applyPlayStationPacket(state, car.clock60) || updated;
-		}
+		while (f1Telem.poll(car)) updated = useF1Sample(state, car) || updated;
+		// What the strip received from the game: only when nothing comes here.
+		while (f1Relay.poll(car))
+			if (!f1Telem.live(1500)) updated = useF1Sample(state, car) || updated;
 		return updated;
+	}
+
+	bool useF1Sample(DashboardState &state, const F1Udp::Car &car)
+	{
+		if (!telemetry.gt7.alive(millis())) { derivedMetrics.reset(); resetLapDifference(); }
+		fillF1Packet(car, gt7Packet.packetContent);
+		f1Source = true;
+		return applyPlayStationPacket(state, car.clock60);
+	}
+
+	// The LED strip found on the network; on the iPhone hotspot, where
+	// broadcasts may not arrive, the address it takes by itself (.14).
+	IPAddress ledStripAddress() const
+	{
+		IPAddress address;
+		if (ledStripFound && address.fromString(ledStripIP)) return address;
+		const IPAddress hotspotStrip(172, 20, 10, 14);
+		if (WiFi.gatewayIP() == IPAddress(172, 20, 10, 1) && WiFi.subnetMask() == IPAddress(255, 255, 255, 240) &&
+			WiFi.localIP() != hotspotStrip)
+			return hotspotStrip;
+		return IPAddress();
 	}
 
 	static void fillF1Packet(const F1Udp::Car &car, PacketC &data)
@@ -2179,15 +2206,15 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 
 	// GT7 / F1 25 mode: one line above the address with what arrives from
 	// F1 25, so a wrong setting in the game is seen at once.
-	char lastF1Line[48] = {};
+	char lastF1Line[64] = {};
 	uint32_t lastF1LineMs = 0;
 	void drawF1Diagnostics()
 	{
 		if (telemetry.mode != TelemetryMode::GT7 || WiFi.status() != WL_CONNECTED) return;
 		if (lastF1Line[0] && millis() - lastF1LineMs < 1000) return;
 		lastF1LineMs = millis();
-		char line[48];
-		f1Telem.describe(line, sizeof(line));
+		char line[64];
+		(f1Telem.live(3000) || !f1Relay.live(3000) ? f1Telem : f1Relay).describe(line, sizeof(line));
 		if (strcmp(line, lastF1Line) == 0) return;
 		strcpy(lastF1Line, line);
 		tft.fillRect(0, SCREEN_HEIGHT - 30, SCREEN_WIDTH, 14, TFT_BLACK);

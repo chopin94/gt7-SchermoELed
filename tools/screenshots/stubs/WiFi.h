@@ -14,6 +14,13 @@ public:
     operator uint32_t() const { return v_[0] | v_[1] << 8 | v_[2] << 16 | (uint32_t)v_[3] << 24; }
     bool operator==(const IPAddress &o) const { return memcmp(v_, o.v_, 4) == 0; }
     bool operator!=(const IPAddress &o) const { return !(*this == o); }
+    bool fromString(const String &text)
+    {
+        unsigned a, b, c, d;
+        if (sscanf(text.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) return false;
+        v_[0] = a; v_[1] = b; v_[2] = c; v_[3] = d;
+        return true;
+    }
     String toString() const
     {
         char buf[16];
@@ -29,6 +36,7 @@ struct HostWiFi {
     wl_status_t status() const { return connectedStatus; }
     IPAddress localIP() const { return IPAddress(192, 168, 1, 42); }
     IPAddress subnetMask() const { return IPAddress(255, 255, 255, 0); }
+    IPAddress gatewayIP() const { return IPAddress(192, 168, 1, 1); }
     IPAddress broadcastIP() const { return IPAddress(192, 168, 1, 255); }
     String SSID() const { return "Casa"; }
     wifi_mode_t getMode() const { return WIFI_STA; }
