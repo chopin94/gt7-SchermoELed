@@ -5,6 +5,7 @@
 #include "../../dashboard/src/LapAnalysis.h"
 #include "../../dashboard/src/GripAnalysis.h"
 #include "../../dashboard/src/TrackStore.h"
+#include "../../dashboard/lib/F1Udp/F1Decoder.h"
 #include "LedEffects.h"
 #include "JsonOut.h"
 
@@ -60,6 +61,49 @@ struct Packet
     int startPosition = -1, cars = -1;
     int32_t carCode = 0;
 };
+
+// F1 25: the player's car in the fields of a GT7 packet, so themes, delta,
+// sectors, braking points, web page and phone dashboard work the same way.
+inline void fromF1(const F1Udp::Car &c, Packet &p)
+{
+    // GT7 gives wheel revolutions and radius: the same wheel speed in m/s.
+    static const float TYRE_RADIUS = 0.33f;
+    p = Packet();
+    p.packetId = c.clock60;
+    p.flags = F1Udp::gt7Flags(c);
+    p.rpm = c.rpm;
+    p.minAlertRpm = c.alertRpm;
+    p.maxAlertRpm = c.shiftRpm;
+    p.speed = c.speed;
+    p.gear = F1Udp::gt7Gear(c.gear);
+    p.suggestedGear = F1Udp::gt7SuggestedGear(c.suggestedGear);
+    p.throttle = p.throttleOut = static_cast<uint8_t>(lroundf(c.throttle * 255.0f));
+    p.brake = p.brakeOut = static_cast<uint8_t>(lroundf(c.brake * 255.0f));
+    p.clutch = c.clutch;
+    for (int i = 0; i < 3; ++i)
+    {
+        p.position[i] = c.position[i];
+        p.velocity[i] = c.velocity[i];
+    }
+    p.fuelLevel = c.fuel;
+    p.fuelCapacity = c.fuelCapacity;
+    p.waterTemp = c.engineTemp;
+    for (int i = 0; i < 4; ++i)
+    {
+        p.tyreTemp[i] = c.tyreTemp[i];
+        p.tyreRadius[i] = c.hasWheels ? TYRE_RADIUS : 0.0f;
+        p.wheelRps[i] = c.hasWheels ? c.wheelSpeed[i] / TYRE_RADIUS : 0.0f;
+        p.suspHeight[i] = c.suspension[i];
+    }
+    p.lapCount = c.lap;
+    p.totalLaps = c.totalLaps;
+    p.bestLapMs = c.bestLapMs;
+    p.lastLapMs = c.lastLapMs;
+    p.currentLapMs = c.currentLapMs;
+    p.startPosition = c.racePosition > 0 ? c.racePosition : -1; // F1: the position in the race
+    p.cars = c.cars > 0 ? c.cars : -1;
+    p.carCode = F1Udp::gt7CarCode(c);
+}
 
 // Fuel used per lap, as the screen estimates it (GT7FuelEstimator).
 class FuelEstimator

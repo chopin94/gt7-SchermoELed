@@ -2,7 +2,7 @@
 
 # 🏁 GT7 Schermo e LED
 
-**Cruscotto da 320×240 e striscia LED dietro la TV per Gran Turismo 7 e Assetto Corsa**<br>
+**Cruscotto da 320×240 e striscia LED dietro la TV per Gran Turismo 7, F1 25 e Assetto Corsa**<br>
 Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 
 ![ESP32](https://img.shields.io/badge/ESP32-2432S024C%20%2F%202432S028-E7352C?logo=espressif&logoColor=white)
@@ -52,6 +52,7 @@ Due ESP32 che leggono la telemetria del gioco in Wi-Fi, senza PC.
 ```mermaid
 flowchart LR
     PS5["🎮 PS5 / PS4<br/>Gran Turismo 7"]
+    F1["🏁 PS5 / PC<br/>F1 25"]
     AC["🏎️ Assetto Corsa<br/>(PC o console)"]
     PC["💻 PC + SimHub"]
     DASH["📟 Schermo 320×240<br/>ESP32-2432S024C"]
@@ -60,6 +61,8 @@ flowchart LR
 
     PS5 -- "UDP 33739/33740<br/>telemetria cifrata Salsa20" --> DASH
     PS5 -- "UDP 33739/33740" --> LED
+    F1 -- "UDP 20777 broadcast" --> DASH
+    F1 -- "UDP 20777 broadcast" --> LED
     AC -- "UDP 9996<br/>Remote Telemetry" --> DASH
     PC -- "USB seriale<br/>Custom Protocol DSH1" --> DASH
     LED -- "UDP 33741 broadcast<br/>annuncio GT7LED" --> DASH
@@ -69,7 +72,25 @@ flowchart LR
 
 - Lo **schermo** e la **striscia LED** si collegano alla stessa rete Wi-Fi della console e ricevono la telemetria di GT7 direttamente, ognuno per conto suo.
 - La striscia si annuncia in rete ogni 2 secondi. Lo schermo la trova da solo e diventa il suo **telecomando**: tema, luminosità, colore e animazione di riposo si cambiano dal touch, senza aprire la pagina web.
-- In alternativa a GT7 lo schermo legge **Assetto Corsa** in Wi-Fi, oppure qualsiasi gioco PC tramite **SimHub** via USB.
+- **F1 25** funziona come GT7, su schermo, striscia e pagina web: i dati dell'auto diventano pacchetti in stile GT7 e passano per lo stesso codice ([come si attiva](#f1-25)).
+- In alternativa lo schermo legge **Assetto Corsa** in Wi-Fi, oppure qualsiasi gioco PC tramite **SimHub** via USB.
+
+### F1 25
+
+Nel gioco: **Impostazioni → Telemetria**
+
+| Voce | Valore |
+| --- | --- |
+| Telemetria UDP | Attiva |
+| Modalità broadcast UDP | **Attiva** (così ricevono schermo e striscia insieme) |
+| Porta UDP | 20777 |
+| Frequenza di invio UDP | 60 Hz (se la striscia scatta, 30 Hz) |
+| Formato UDP | 2025 (vanno bene anche 2024 e, con il Season Pack, 2026) |
+| Telemetria dell'auto | Pubblica, se giochi online |
+
+Sullo schermo la connessione è **GT7 / F1 25** (la stessa di GT7: ascolta i due giochi insieme). La striscia ascolta sempre tutti e due. Il contagiri usa le luci di cambiata del gioco: dove si accende la prima e dove si accendono tutte lo impara nei primi allunghi. Sullo schermo la posizione mostrata è quella in gara; i circuiti salvati sono per scuderia. Il decodificatore ([`lib/F1Udp`](firmware/dashboard/lib/F1Udp/F1Decoder.h)) è condiviso dai due firmware e provato da [test](firmware/dashboard/tests/f1_decoder.cpp) con pacchetti costruiti byte per byte e da una gara simulata che passa per l'analisi della striscia.
+
+> **Assetto Corsa Competizione** ed **EA Sports WRC** su PS5 non trasmettono telemetria: nessun cruscotto esterno può leggerli. Assetto Corsa (il primo) e F1 25 sì.
 - La striscia ha una **pagina web di telemetria in tempo reale** (contagiri, delta, settori, mappa, forze G, tracce, gomme, giri, esportazione CSV) da aprire sul telefono o sul PC ([come](#telemetria-web-della-striscia)).
 - Dai dati grezzi del gioco lo schermo (e anche la striscia, con lo stesso codice) calcola da solo **delta live, settori, mappa del circuito, forze G, tempi di accelerazione, punti di frenata e slittamento delle ruote** ([come](#analisi-del-giro-delta-live-settori-mappa-frenate)) e si ricorda dei circuiti già guidati ([come](#circuiti-salvati)).
 
@@ -301,7 +322,7 @@ Tocca lo schermo in qualsiasi momento per aprire il menu. Senza tocchi si chiude
 | **LED: montaggio** | LED del lato destro, alto e sinistro, lato di partenza della striscia, prova di montaggio da 15 s (tenendo premuto `-`/`+` il valore scorre) |
 | **LED: avanzate** | Scala del delta, spegnimento dopo N minuti senza GT7, riavvio della striscia, azzeramento di giri e circuito |
 | **Dispositivo** | Luminosità dello schermo, sorgente dati (GT7, AC, SimHub), ripristino di fabbrica (cancella anche i circuiti salvati) |
-| **Scelta connessione** | Al primo avvio: GT7 diretto, Assetto Corsa diretto o SimHub USB |
+| **Scelta connessione** | Al primo avvio: GT7 / F1 25 diretto, Assetto Corsa diretto o SimHub USB |
 | **Configurazione Wi-Fi** | QR code per collegarsi alla rete `GT7-DASH-SETUP` e aprire `192.168.4.1` |
 | **Calibrazione touch** | Solo al primo avvio: si tocca il bersaglio, poi lo si verifica e si salva |
 
@@ -535,6 +556,7 @@ I primi tre controlli li fa già il browser, prima di inviare il file; il dispos
 │   │   │   ├── ACUdpTelemetry.h     Telemetria Assetto Corsa
 │   │   │   └── sparco_*.h           Immagini della schermata di attesa
 │   │   ├── lib/                     GT7 UDP, metriche derivate, librerie SimHub
+│   │   ├── lib/F1Udp/               Telemetria F1 25 (formati 2024-2026), usata anche dalla striscia LED
 │   │   ├── lib/OtaUpdate/           Aggiornamento via Wi-Fi e controlli sul file (usata dalla striscia LED)
 │   │   ├── simhub/                  Formula Custom Protocol per SimHub
 │   │   ├── docs/                    Protocollo di telemetria, sviluppo temi, EV
@@ -543,7 +565,7 @@ I primi tre controlli li fa già il browser, prima di inviare il file; il dispos
 │       ├── platformio.ini
 │       ├── src/main.cpp             Wi-Fi, API, impostazioni, ciclo dei LED
 │       ├── src/LedEffects.h         Geometria a U, temi, avvisi, animazioni (C++ puro)
-│       ├── src/RaceTelemetry.h      Pacchetti GT7 → analisi del giro → LED e JSON (C++ puro)
+│       ├── src/RaceTelemetry.h      Pacchetti GT7 o F1 25 → analisi del giro → LED e JSON (C++ puro)
 │       ├── src/EventStream.h        Flusso Server-Sent Events non bloccante
 │       ├── src/WebPage.h            Pagina di telemetria
 │       └── tests/                   Test degli effetti e della gara simulata
@@ -584,6 +606,7 @@ Il codice nuovo è provato da test su PC e dal simulatore, e compila per tutte l
 - **Circuiti salvati**: al primo avvio dopo l'installazione lo schermo formatta il filesystem e l'avvio dura qualche secondo in più (fino a una decina, solo quella volta). Per controllare che salvi, guida due giri e riavvia: al giro lanciato successivo mappa e punti di frenata devono comparire subito.
 - **Striscia LED 2.0**: compilata in CI e provata su PC (effetti, gara simulata, pagina web nel browser), ma non ancora sull'ESP32-S2 reale. Da guardare: che i LED per lato corrispondano (usa *Prova montaggio*), che la pagina web resti fluida con il telefono aperto durante la gara, che delta e frenate compaiano dal secondo giro (o subito su un circuito salvato). L'ESP32-S2 non ha unità di calcolo in virgola mobile: se la striscia sembrasse meno fluida di prima, il tema *Velocità* e le animazioni *Fuoco* e *Aurora* sono i più pesanti.
 - **Cruscotto sul telefono (2.1)**: provato nel browser con la gara simulata, non ancora con GT7 e la striscia vera. Da guardare: che `gt7led.local` si apra dal telefono, che con il cruscotto aperto LED e pagina restino fluidi (il flusso del cruscotto arriva a 60 fotogrammi al secondo; se servisse alleggerirlo, l'intervallo minimo di 14 ms è nel `loop()` di [`main.cpp`](firmware/led-strip/src/main.cpp)), che lo schermo non si spenga dopo il primo tocco, e il verso del cerchio G e delle gomme (anteriore sinistra in alto a sinistra).
+- **F1 25**: provato con pacchetti costruiti dalla specifica e con la gara simulata, non ancora con il gioco. Da guardare: che schermo e striscia ricevano insieme (broadcast attivo), che il verso della mappa sia giusto, che con la frequenza a 60 Hz la striscia resti fluida, che slittamento e sospensioni abbiano senso (le sospensioni di F1 hanno un'altra unità, la scala si impara).
 - **Forze G**: restano calcolate da velocità e traiettoria. Il pacchetto GT7 contiene anche le accelerazioni (`sway`, `heave`, `surge`) ma senza unità documentate; non le ho usate senza poterle confrontare in gioco.
 
 ## Prossimi passi

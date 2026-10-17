@@ -352,7 +352,7 @@ function setNote(t,cls){if(t!==noteText){note.hidden=!t;note.firstChild.textCont
 const IDLE={live:0,rpm:0,mx:0,al:0,kmh:0,g:15,d:null,ss:[0,0,0],sm:[0,0,0],tt:[0,0,0,0],sl:[0,0,0,0],ws:[0,0,0,0],lk:[0,0,0,0],f:0};
 function loop(now){
  const stale=!cur||now-lastAt>2000;
- setNote(stale?(searching?'Cerco la striscia in rete…':cur?'Nessun dato dalla striscia':'Collegamento alla striscia…'):!cur.live?'In attesa di GT7':(cur.f&2)?'In pausa':'',stale||!cur.live?'off':'');
+ setNote(stale?(searching?'Cerco la striscia in rete…':cur?'Nessun dato dalla striscia':'Collegamento alla striscia…'):!cur.live?'In attesa di GT7 o F1 25':(cur.f&2)?'In pausa':'',stale||!cur.live?'off':'');
  if(dirty||(prev&&now-curAt<gap)||anim){const o=view(now)||IDLE;anim=!!paint(o);dirty=false}
  requestAnimationFrame(loop);
 }

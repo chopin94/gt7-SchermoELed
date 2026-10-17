@@ -16,8 +16,10 @@ HostWiFi WiFi;
 #define INCLUDE_GT7_WIFI true
 #include <GT7UDPParser.h>
 #include "ACUdpTelemetry.h"
+#include <F1UdpReceiver.h>
 GT7_UDP_Parser gt7Telem;
 Packet gt7Packet;
+F1UdpReceiver f1Telem;
 ACUdpTelemetry acTelem;
 
 // SimHub USB serial (FlowSerial in main.cpp) is not used for screenshots.
