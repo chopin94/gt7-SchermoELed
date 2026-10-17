@@ -19,7 +19,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.1.0"
+#define LED_FIRMWARE_VERSION "2.1.1"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -459,6 +459,10 @@ void setup()
     }
     Serial.print("IP: ");
     Serial.println(WiFi.localIP());
+    // Wi-Fi sempre sveglio: con il risparmio energetico (attivo di default)
+    // la scheda dorme tra un beacon e l'altro, perde le domande mDNS di
+    // gt7led.local e ritarda pacchetti di GT7 e flussi verso il telefono.
+    WiFi.setSleep(false);
 
     // Mostra verde
     fill_solid(leds, activeLeds, CRGB::Green);
