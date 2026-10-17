@@ -474,6 +474,11 @@ int main(int argc, char **argv)
 
     printf("Schermata di attesa:\n");
     waitingScreen(0, false, "waiting-minimale");
+    // GT7 / F1 25 mode: the line with what arrives from F1 25 (nothing here)
+    dash.connectingScreenActive = false;
+    tft.fillScreen(TFT_BLACK);
+    dash.updateConnectingScreen();
+    savePng("waiting-diagnosi-f1");
     waitingScreen(1, true, "waiting-racing");
     waitingScreen(2, true, "waiting-riepilogo");
     WiFi.connectedStatus = WL_DISCONNECTED;
