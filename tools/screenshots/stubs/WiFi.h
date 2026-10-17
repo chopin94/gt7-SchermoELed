@@ -36,6 +36,7 @@ struct HostWiFi {
     wl_status_t status() const { return connectedStatus; }
     IPAddress localIP() const { return IPAddress(192, 168, 1, 42); }
     IPAddress subnetMask() const { return IPAddress(255, 255, 255, 0); }
+    IPAddress gatewayIP() const { return IPAddress(192, 168, 1, 1); }
     IPAddress broadcastIP() const { return IPAddress(192, 168, 1, 255); }
     String SSID() const { return "Casa"; }
     wifi_mode_t getMode() const { return WIFI_STA; }

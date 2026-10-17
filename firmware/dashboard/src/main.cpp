@@ -8,6 +8,8 @@ GT7_UDP_Parser gt7Telem;
 Packet gt7Packet;
 // F1 25: read in GT7 mode as well, it feeds the same code.
 F1UdpReceiver f1Telem;
+// What the LED strip received from F1 25 and copies to the screen.
+F1UdpReceiver f1Relay(F1UdpReceiver::RELAY_PORT);
 ACUdpTelemetry acTelem;
 
 // No longer have to define whether it's an ESP32 or ESP8266, just do an initial compilation and
@@ -1143,7 +1145,7 @@ void setupDashboardNetwork() {
     dashboardNetworkReady = dashboardNetwork.begin();
 }
 void stopDirectTelemetrySockets() {
-    gt7Telem.stop(); f1Telem.stop(); gt7SocketReady = false;
+    gt7Telem.stop(); f1Telem.stop(); f1Relay.stop(); gt7SocketReady = false;
     acTelem.stop(); acSocketReady = false;
 }
 void serviceDashboardNetwork() {
@@ -1165,8 +1167,8 @@ void serviceDashboardNetwork() {
         shCustomProtocol.networkState(status.message, status.portal, status.connected, status.configured);
         const bool gt7Connected = mode == TelemetryMode::GT7 && status.connected;
         if (gt7Connected && !gt7SocketReady) {
-            gt7Telem.begin(IPAddress(255,255,255,255), 'C'); f1Telem.begin(); gt7SocketReady = true;
-        } else if (!gt7Connected && gt7SocketReady) { gt7Telem.stop(); f1Telem.stop(); gt7SocketReady = false; }
+            gt7Telem.begin(IPAddress(255,255,255,255), 'C'); f1Telem.begin(); f1Relay.begin(); gt7SocketReady = true;
+        } else if (!gt7Connected && gt7SocketReady) { gt7Telem.stop(); f1Telem.stop(); f1Relay.stop(); gt7SocketReady = false; }
         const bool acConnected = mode == TelemetryMode::AC && status.connected;
         if (acConnected && !acSocketReady) {
             acTelem.begin(); acSocketReady = true;

@@ -20,7 +20,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.3.2"
+#define LED_FIRMWARE_VERSION "2.3.3"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -68,7 +68,9 @@ int32_t lastGt7PacketId = -1;
 // Telemetria, UDP attiva e trasmissione (broadcast) attiva, formato 2025.
 F1UdpReceiver f1Telem;
 // Le copie che lo schermo inoltra quando F1 25 manda i dati solo a lui
-// (broadcast spento): usate solo se dal gioco non arriva niente qui.
+// (broadcast spento): usate solo se dal gioco non arriva niente qui. Sulla
+// stessa porta lo schermo saluta ogni 2 s: la striscia gli inoltra ciò che
+// riceve dal gioco, così in F1 25 basta l'indirizzo di uno dei due.
 F1UdpReceiver f1Relay(F1UdpReceiver::RELAY_PORT);
 
 // ==================== WEB SERVER & UDP ====================
@@ -265,6 +267,7 @@ void handleApiStatus()
     char f1State[64];
     (f1Telem.live(3000) || !f1Relay.live(3000) ? f1Telem : f1Relay).describe(f1State, sizeof(f1State));
     j.text("f1", f1State); // cosa arriva da F1 25: si vede subito un'impostazione sbagliata
+    j.text("screen", f1Relay.peer() == IPAddress() ? "" : f1Relay.peer().toString().c_str());
     j.field("rpm", race.live(now) ? p.rpm : 0.0f, 0);
     j.field("maxRpm", race.live(now) ? p.maxAlertRpm : 0.0f, 0);
     j.field("speed", race.live(now) ? p.speed : 0.0f, 2);
@@ -548,6 +551,7 @@ static void readTelemetry()
         copyPacket(d, gt7Telem.getCurrentGearFromByte(), gt7Telem.getSuggestedGearFromByte(), p);
         useSample(p);
     }
+    f1Telem.setRelay(f1Relay.peer());
     F1Udp::Car car;
     for (int k = 0; k < 8 && f1Telem.poll(car); ++k)
     {
