@@ -184,11 +184,119 @@ static void testRace()
     CHECK(race.lap.lapsCompleted() == 0 && race.lap.mapState() == LapAnalysis::MapState::Waiting);
 }
 
+// ---- The same race sent by F1 25 (UDP format 2025), byte by byte ----
+struct F1Wire
+{
+    static const int CARS = 22, PLAYER = 5;
+    std::vector<uint8_t> b;
+    F1Wire(uint8_t id, size_t size) : b(size, 0)
+    {
+        put<uint16_t>(0, 2025);
+        b[2] = 25;
+        b[6] = id;
+        put<uint64_t>(7, 42);
+        b[27] = PLAYER;
+    }
+    template <typename T>
+    void put(size_t offset, T v) { memcpy(&b[offset], &v, sizeof(T)); }
+};
+
+// One frame of the simulated race as the packets of F1 25.
+static std::vector<F1Wire> f1Frame(const SimRace &sim)
+{
+    const Race::Packet g = sim.packet();
+    std::vector<F1Wire> out;
+    F1Wire motion(0, 29 + F1Wire::CARS * 60);
+    size_t o = 29 + F1Wire::PLAYER * 60;
+    for (int i = 0; i < 3; ++i)
+    {
+        motion.put<float>(o + i * 4, g.position[i]);
+        motion.put<float>(o + 12 + i * 4, g.velocity[i]);
+    }
+    out.push_back(motion);
+    F1Wire session(1, 753);
+    session.b[29 + 3] = static_cast<uint8_t>(sim.totalLaps + 1); // the out-lap is lap 1
+    session.b[29 + 6] = 15;                                       // race
+    out.push_back(session);
+    F1Wire lap(2, 29 + F1Wire::CARS * 57 + 2);
+    o = 29 + F1Wire::PLAYER * 57;
+    lap.put<uint32_t>(o, g.lastLapMs > 0 ? g.lastLapMs : 0);
+    lap.put<uint32_t>(o + 4, g.currentLapMs > 0 ? g.currentLapMs : 0);
+    lap.b[o + 32] = 4;
+    lap.b[o + 33] = static_cast<uint8_t>(sim.lapCount + 1);
+    lap.b[o + 44] = 4; // on track
+    out.push_back(lap);
+    F1Wire status(7, 29 + F1Wire::CARS * 55);
+    o = 29 + F1Wire::PLAYER * 55;
+    status.put<float>(o + 5, g.fuelLevel);
+    status.put<float>(o + 9, g.fuelCapacity);
+    status.put<uint16_t>(o + 17, 8400);
+    out.push_back(status);
+    F1Wire ex(13, 273);
+    for (int i = 0; i < 4; ++i) ex.put<float>(29 + 48 + i * 4, g.speed);
+    out.push_back(ex);
+    F1Wire tel(6, 29 + F1Wire::CARS * 60 + 3);
+    o = 29 + F1Wire::PLAYER * 60;
+    tel.put<uint16_t>(o, static_cast<uint16_t>(lroundf(g.speed * 3.6f)));
+    tel.put<float>(o + 2, g.throttle / 255.0f);
+    tel.put<float>(o + 10, g.brake / 255.0f);
+    tel.b[o + 15] = g.gear;
+    tel.put<uint16_t>(o + 16, static_cast<uint16_t>(g.rpm));
+    tel.b[o + 19] = g.rpm >= 7000 ? static_cast<uint8_t>(fminf(100.0f, (g.rpm - 7000) / 10.0f)) : 0;
+    out.push_back(tel);
+    return out;
+}
+
+static void testF1Race()
+{
+    SimRace sim;
+    Race::Telemetry race;
+    F1Udp::Decoder decoder;
+    int best = 0, finalLap = 0, finish = 0, samples = 0;
+    bool deltaOnSecondLap = false, racing = true;
+    for (int k = 0; k < 60 * 400 && sim.lapCount <= 4; ++k)
+    {
+        sim.step();
+        for (const F1Wire &w : f1Frame(sim))
+        {
+            F1Udp::Car car;
+            if (!decoder.feed(w.b.data(), w.b.size(), sim.nowMs, car)) continue;
+            Race::Packet p;
+            Race::fromF1(car, p);
+            race.update(p, sim.nowMs);
+            samples++;
+        }
+        LedFx::Event e;
+        while (race.takeEvent(e))
+        {
+            if (e == LedFx::Event::BestLap) best++;
+            if (e == LedFx::Event::FinalLap) finalLap++;
+            if (e == LedFx::Event::Finish) finish++;
+        }
+        LedFx::Input in;
+        race.fillInput(in, sim.nowMs);
+        if (k > 2) racing = racing && in.racing;
+        if (sim.lapCount == 2 && sim.lapFraction() > 0.2f && in.hasDelta) deltaOnSecondLap = true;
+        sim.pace = sim.lapCount == 2 && sim.lapFraction() > 0.5f ? 0.93f : sim.lapCount == 3 ? 1.0f : 0.97f;
+    }
+    printf("  F1 25: %d samples, laps %d, packets %.0f/s\n", samples, sim.lapCount, race.packetRate(sim.nowMs));
+    CHECK(racing);
+    CHECK(race.lap.mapState() == LapAnalysis::MapState::Complete);
+    CHECK(race.lap.lapsCompleted() == 4);
+    CHECK(deltaOnSecondLap);
+    CHECK(best >= 2);
+    CHECK(finalLap == 1);
+    CHECK(finish == 1);
+    CHECK(race.packet().maxAlertRpm > 7000 && race.packet().minAlertRpm >= 7000);
+    CHECK((race.packet().carCode >> 16) == 0); // no participants packet: no team yet
+}
+
 int main()
 {
     testJsonOut();
     testFuel();
     testRace();
+    testF1Race();
     if (failures) { printf("%d check(s) failed\n", failures); return 1; }
     printf("race telemetry: all checks passed\n");
     return 0;

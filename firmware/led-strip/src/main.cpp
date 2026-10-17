@@ -8,6 +8,7 @@
 #include <LittleFS.h>
 #include <OtaWebUpdate.h>
 #include <GT7UDPParser.h>
+#include <F1UdpReceiver.h>
 #include <Preferences.h>
 #include "LedEffects.h"
 #include "RaceTelemetry.h"
@@ -19,7 +20,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.2.0"
+#define LED_FIRMWARE_VERSION "2.3.0"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -57,7 +58,15 @@ Race::Telemetry race;
 LittleFsStorage trackFiles;
 TrackStore::Store trackStore(trackFiles);
 bool trackFilesReady = false;
+// Ultimo pacchetto usato, di GT7 o di F1 25 (il cruscotto lo manda appena arriva)
 int32_t lastPacketId = -1;
+// Ultimo pacchetto di GT7: readData() ripete l'ultimo finché non ne arriva uno nuovo
+int32_t lastGt7PacketId = -1;
+
+// ==================== F1 25 ====================
+// Ascoltato insieme a GT7 sulla porta 20777: in F1 25 Impostazioni >
+// Telemetria, UDP attiva e trasmissione (broadcast) attiva, formato 2025.
+F1UdpReceiver f1Telem;
 
 // ==================== WEB SERVER & UDP ====================
 OtaWebServer server(80);
@@ -511,6 +520,14 @@ static void copyPacket(const PacketC &d, uint8_t gear, uint8_t suggested, Race::
     p.carCode = d.carCode;
 }
 
+static void useSample(const Race::Packet &p)
+{
+    lastPacketId = p.packetId;
+    race.update(p, millis());
+    LedFx::Event event;
+    while (race.takeEvent(event)) effects.trigger(event, millis());
+}
+
 // Legge tutti i pacchetti arrivati: l'analisi del giro li vuole tutti, anche
 // quando una richiesta web ha fermato il ciclo per qualche decina di ms.
 static void readTelemetry()
@@ -519,13 +536,18 @@ static void readTelemetry()
     {
         const Packet packet = gt7Telem.readData();
         const PacketC &d = packet.packetContent;
-        if (d.magic != 0x47375330 || d.packetId == lastPacketId) return;
-        lastPacketId = d.packetId;
+        if (d.magic != 0x47375330 || d.packetId == lastGt7PacketId) break;
+        lastGt7PacketId = d.packetId;
         Race::Packet p;
         copyPacket(d, gt7Telem.getCurrentGearFromByte(), gt7Telem.getSuggestedGearFromByte(), p);
-        race.update(p, millis());
-        LedFx::Event event;
-        while (race.takeEvent(event)) effects.trigger(event, millis());
+        useSample(p);
+    }
+    F1Udp::Car car;
+    for (int k = 0; k < 8 && f1Telem.poll(car); ++k)
+    {
+        Race::Packet p;
+        Race::fromF1(car, p);
+        useSample(p);
     }
 }
 
@@ -620,6 +642,7 @@ void setup()
 
     gt7Telem.begin(playstationIP, packetVersion);
     gt7Telem.sendHeartbeat();
+    f1Telem.begin();
 }
 
 // ==================== LOOP ====================

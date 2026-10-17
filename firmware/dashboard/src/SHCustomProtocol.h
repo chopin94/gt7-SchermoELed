@@ -665,6 +665,10 @@ private:
 	int32_t lastGT7PacketId = -1;
 	bool hasReceivedGT7Packet = false;
 	bool gt7CarOnTrack = false;
+	// The last PlayStation packet came from F1 25 (readF1Wifi).
+	bool f1Source = false;
+	// F1 gives the wheel speeds in m/s: GT7 rad/s on a wheel of this radius.
+	static constexpr float F1_TYRE_RADIUS = 0.33f;
 
 	// GT7 銵??豢?嚗BS ?擗硃???詻?
 	GT7DerivedMetrics derivedMetrics;
@@ -1029,17 +1033,82 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 		hasReceivedGT7Packet = true;
 		lastGT7PacketId = packetId;
 		lastGT7PacketTime = millis();
+		f1Source = false;
+		return applyPlayStationPacket(state, packetId);
+	}
 
+	// F1 25 over UDP: each sample of the player's car becomes a GT7 packet, so
+	// the themes, the lap analysis and the saved circuits work as with GT7.
+	bool readF1Wifi(DashboardState &state)
+	{
+		bool updated = false;
+		F1Udp::Car car;
+		while (f1Telem.poll(car))
+		{
+			if (!telemetry.gt7.alive(millis())) { derivedMetrics.reset(); resetLapDifference(); }
+			fillF1Packet(car, gt7Packet.packetContent);
+			f1Source = true;
+			updated = applyPlayStationPacket(state, car.clock60) || updated;
+		}
+		return updated;
+	}
+
+	static void fillF1Packet(const F1Udp::Car &car, PacketC &data)
+	{
+		const float radius = F1_TYRE_RADIUS;
+		data = PacketC();
+		data.magic = 0x47375330;
+		data.packetId = car.clock60;
+		for (int i = 0; i < 3; ++i)
+		{
+			data.position[i] = car.position[i];
+			data.worldVelocity[i] = car.velocity[i];
+		}
+		data.EngineRPM = car.rpm;
+		data.speed = car.speed;
+		data.fuelLevel = car.fuel;
+		data.fuelCapacity = car.fuelCapacity;
+		data.boost = NAN;
+		data.waterTemp = car.engineTemp;
+		for (int i = 0; i < 4; ++i)
+		{
+			data.tyreTemp[i] = car.tyreTemp[i];
+			// GT7 gives wheel rad/s and radius: the same wheel speed in m/s.
+			data.tyreRadius[i] = car.hasWheels ? radius : 0.0f;
+			data.wheelRPS[i] = car.hasWheels ? car.wheelSpeed[i] / radius : 0.0f;
+			data.suspHeight[i] = car.suspension[i];
+		}
+		data.lapCount = static_cast<int16_t>(car.lap);
+		data.totalLaps = static_cast<int16_t>(car.totalLaps);
+		data.bestLaptime = car.bestLapMs;
+		data.lastLaptime = car.lastLapMs;
+		data.currentLap = car.currentLapMs;
+		data.dayProgression = -1;
+		data.RaceStartPosition = static_cast<int16_t>(car.racePosition > 0 ? car.racePosition : -1);
+		data.preRaceNumCars = static_cast<int16_t>(car.cars > 0 ? car.cars : -1);
+		data.minAlertRPM = static_cast<int16_t>(car.alertRpm);
+		data.maxAlertRPM = static_cast<int16_t>(car.shiftRpm);
+		data.flags = static_cast<SimulatorFlags>(F1Udp::gt7Flags(car));
+		data.gears = F1Udp::gt7Gear(car.gear) | (F1Udp::gt7SuggestedGear(car.suggestedGear) << 4);
+		data.throttle = data.throttleFiltered = static_cast<uint8_t>(lroundf(car.throttle * 255.0f));
+		data.brake = data.brakeFiltered = static_cast<uint8_t>(lroundf(car.brake * 255.0f));
+		data.clutch = car.clutch;
+		data.carCode = F1Udp::gt7CarCode(car);
+		memcpy(data.carCategory, "F1", 3);
+	}
+
+	// One GT7 packet (in gt7Packet), from GT7 or made from F1 25.
+	bool applyPlayStationPacket(DashboardState &state, int32_t packetId)
+	{
 		const auto &data = gt7Packet.packetContent;
 
 		// ?漲??雿?
 		state.speed = String(static_cast<int>(data.speed * 3.6f));
 
-		const int currentGear =
-			gt7Telem.getCurrentGearFromByte();
+		const int currentGear = data.gears & 0x0F;
 
 		// GT7 reports neutral as 15 and reverse as 0 in the gear nibble.
-		const int suggestedGear = gt7Telem.getSuggestedGearFromByte();
+		const int suggestedGear = data.gears >> 4;
 		state.suggestedGear = suggestedGear == 15 ? "" : String(suggestedGear);
 		state.gear = currentGear == 15 ? "N"
 				   : currentGear == 0  ? "R"
@@ -1453,7 +1522,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 #endif
 
     const char *sourceName() const {
-        return telemetry.active == TelemetrySource::GT7 ? "GT7 Wi-Fi"
+        return telemetry.active == TelemetrySource::GT7 ? (f1Source ? "F1 25 Wi-Fi" : "GT7 Wi-Fi")
             : telemetry.active == TelemetrySource::SimHub ? "SimHub USB"
             : telemetry.active == TelemetrySource::AC ? "AC Wi-Fi" : "Waiting";
     }
@@ -1645,6 +1714,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
             static uint32_t lastHeartbeat = 0;
             if (uint32_t(now - lastHeartbeat) >= 500) { lastHeartbeat = now; gt7Telem.sendHeartbeat(); }
             gt7Dirty = readGT7Wifi(gt7State) || gt7Dirty;
+            gt7Dirty = readF1Wifi(gt7State) || gt7Dirty;
         }
         if (!firstRun && acTransportReady && telemetry.mode == TelemetryMode::AC && WiFi.status() == WL_CONNECTED)
             acDirty = readACWifi(acState) || acDirty;
@@ -2420,7 +2490,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         else if (settingsScreen == SettingsScreen::ConnectionChoice) {
             tft.setTextColor(TFT_WHITE, TFT_BLACK);
             tft.drawString("SCEGLI CONNESSIONE", X_CENTER, 24, 4);
-            drawSettingsButton(25, 50, 270, 44, "DIRECT GT7", pressedButton == 0);
+            drawSettingsButton(25, 50, 270, 44, "DIRECT GT7 / F1 25", pressedButton == 0);
             drawSettingsButton(25, 100, 270, 44, "DIRECT ASSETTO CORSA", pressedButton == 3);
             drawSettingsButton(25, 150, 270, 44, "SIMHUB USB", pressedButton == 1);
             if (connectionChoiceCanCancel)
@@ -2489,7 +2559,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			drawSettingsButton(250, 50, 50, 38, "+", pressedButton == 1);
 			tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
 			tft.drawString("CONNESSIONE", X_CENTER, 101, 1);
-			drawSettingsButton(20, 111, 88, 38, "GT7", pressedButton == 2,
+			drawSettingsButton(20, 111, 88, 38, "GT7/F1", pressedButton == 2,
 				telemetry.mode == TelemetryMode::GT7);
 			drawSettingsButton(116, 111, 88, 38, "AC", pressedButton == 6,
 				telemetry.mode == TelemetryMode::AC);
@@ -2552,7 +2622,7 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			else if (button == 1)
 				drawSettingsButton(250, 50, 50, 38, "+", pressed);
 			else if (button == 2)
-				drawSettingsButton(20, 111, 88, 38, "GT7", pressed,
+				drawSettingsButton(20, 111, 88, 38, "GT7/F1", pressed,
 					telemetry.mode == TelemetryMode::GT7);
 			else if (button == 6)
 				drawSettingsButton(116, 111, 88, 38, "AC", pressed,

@@ -235,7 +235,7 @@ input[type=color]{width:100%;height:38px;border:0;background:none;padding:0}
    <h2>Gioco fermo</h2>
    <div class="field"><span>Animazione</span><select id="idle"></select></div>
    <div class="field"><span>Colore</span><input type="color" id="icolor"></div>
-   <div class="field"><span>Spegni dopo minuti senza GT7 <b id="itv"></b></span><input type="range" id="itime" min="0" max="240" step="5"></div>
+   <div class="field"><span>Spegni dopo minuti senza gioco <b id="itv"></b></span><input type="range" id="itime" min="0" max="240" step="5"></div>
   </div>
   <div class="card c6">
    <h2>Luce</h2>
@@ -346,9 +346,9 @@ function setText(id,t){const e=$(id);if(e.textContent!==t)e.textContent=t}
 function onFrame(f){
  F=f;lastFrameAt=Date.now();record(f);
  const st=$('state');
- st.textContent=!f.live?'In attesa di GT7':f.race?'In pista':(f.f&2)?'Pausa':(f.f&4)?'Caricamento':'Menu';
+ st.textContent=!f.live?'In attesa di GT7 o F1 25':f.race?'In pista':(f.f&2)?'Pausa':(f.f&4)?'Caricamento':'Menu';
  st.className='pill'+(f.race?' on':f.live?' pause':'');
- setText('rate',f.live?f.hz.toFixed(0)+' pacchetti/s'+(f.car?' · auto '+f.car:''):'');
+ setText('rate',f.live?f.hz.toFixed(0)+' pacchetti/s'+(f.car?((f.car>>>16)==0x4631?' · F1 25':' · auto '+f.car):''):'');
  const g=f.g==15?'N':f.g==0?'R':''+f.g;$('gear').firstChild.nodeValue=g;
  setText('sgear',f.sg>0&&f.sg<15&&f.sg!=f.g?'consigliata '+f.sg:'');
  setText('kmh',num(f.kmh));setText('rpm',num(f.rpm));setText('rpmmax',f.mx?'/ '+f.mx:'');

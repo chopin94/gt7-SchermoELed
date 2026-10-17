@@ -1,0 +1,7 @@
+{
+  "name":"F1Udp",
+  "version":"1.0.0",
+  "description":"Telemetria UDP di F1 25 (formati 2024, 2025 e 2026): l'auto del giocatore in campi simili a quelli di GT7",
+  "frameworks":"arduino",
+  "platforms":"espressif32"
+}

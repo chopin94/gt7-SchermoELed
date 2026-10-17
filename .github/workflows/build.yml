@@ -73,6 +73,8 @@ jobs:
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/track_store.cpp -o /tmp/store-tests && /tmp/store-tests
       # Slittamento, bloccaggi, carico delle sospensioni (src/GripAnalysis.h)
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/grip_analysis.cpp -o /tmp/grip-tests && /tmp/grip-tests
+      # Telemetria F1 25 (lib/F1Udp): pacchetti 2025 e 2026 costruiti byte per byte
+      - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/f1_decoder.cpp -o /tmp/f1-tests && /tmp/f1-tests
       # Aggiornamento via Wi-Fi della striscia LED (lib/OtaUpdate): controlli sul file e pagina /update
       - run: g++ -std=c++11 -Wall -Wextra -pedantic -fsanitize=address,undefined firmware/dashboard/tests/ota_image.cpp -o /tmp/ota-image-tests && /tmp/ota-image-tests
       - run: g++ -std=gnu++11 -Wall -Wextra -fsanitize=address,undefined -I firmware/dashboard/tests/ota_stubs -I tools/screenshots/stubs -I firmware/dashboard/lib/OtaUpdate firmware/dashboard/tests/ota_web_update.cpp -o /tmp/ota-web-tests && /tmp/ota-web-tests
