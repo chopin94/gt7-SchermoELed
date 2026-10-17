@@ -352,7 +352,7 @@ function setNote(t,cls){if(t!==noteText){note.hidden=!t;note.firstChild.textCont
 const IDLE={live:0,rpm:0,mx:0,al:0,kmh:0,g:15,d:null,ss:[0,0,0],sm:[0,0,0],tt:[0,0,0,0],sl:[0,0,0,0],ws:[0,0,0,0],lk:[0,0,0,0],f:0};
 function loop(now){
  const stale=!cur||now-lastAt>2000;
- setNote(stale?(cur?'Nessun dato dalla striscia':'Collegamento alla striscia…'):!cur.live?'In attesa di GT7':(cur.f&2)?'In pausa':'',stale||!cur.live?'off':'');
+ setNote(stale?(searching?'Cerco la striscia in rete…':cur?'Nessun dato dalla striscia':'Collegamento alla striscia…'):!cur.live?'In attesa di GT7':(cur.f&2)?'In pausa':'',stale||!cur.live?'off':'');
  if(dirty||(prev&&now-curAt<gap)||anim){const o=view(now)||IDLE;anim=!!paint(o);dirty=false}
  requestAnimationFrame(loop);
 }
@@ -367,8 +367,38 @@ addEventListener('resize',applyOrient);
 let es=null;
 function connect(){if(es)es.close();es=new EventSource('/api/dash');
  es.addEventListener('t',e=>{try{onFrame(JSON.parse(e.data))}catch(err){}})}
-// the strip sends a frame at least 4 times a second: silence means a lost connection
-setInterval(()=>{if(!document.hidden&&performance.now()-lastAt>3000)connect()},3000);
+// the strip sends a frame at least 4 times a second: silence means a lost
+// connection. After 6 s the strip may have come back with another address:
+// look for it on the network.
+let lostChecks=0;
+setInterval(()=>{if(document.hidden)return;if(performance.now()-lastAt>3000){connect();if(++lostChecks>=2)search()}else lostChecks=0},3000);
+
+// ---------- automatic search: a browser cannot hear the strip's broadcast
+// like the screen does, so it asks every address of the network for
+// /api/status (13 on an iPhone hotspot, under a second) and reopens the
+// dashboard where the strip answers.
+let net=null,searching=false;
+const toInt=a=>a.split('.').reduce((n,p)=>n*256+(+p),0),toIp=n=>[n>>>24,n>>16&255,n>>8&255,n&255].join('.');
+function hosts(){
+ let ip,mask;
+ if(net&&net.ip&&net.mask){ip=toInt(net.ip);mask=toInt(net.mask)}
+ else if(/^\d+\.\d+\.\d+\.\d+$/.test(location.hostname)){ip=toInt(location.hostname);mask=toInt('255.255.255.0')}
+ else return [];
+ const base=(ip&mask)>>>0,size=Math.min(1024,(~mask>>>0)+1),out=[];
+ for(let i=size-2;i>=1;i--)out.push(toIp(base+i));   // from the top: 172.20.10.14 first on an iPhone hotspot
+ return out;
+}
+function probe(ip){const c=new AbortController(),t=setTimeout(()=>c.abort(),1500);
+ return fetch('http://'+ip+'/api/status',{signal:c.signal,cache:'no-store'}).then(r=>r.json()).then(s=>{clearTimeout(t);if(s.app!=='gt7led')throw 0;return ip})}
+async function search(){
+ if(searching)return;searching=true;
+ const list=hosts();
+ for(let i=0;i<list.length;i+=32){
+  const ip=await Promise.any(list.slice(i,i+32).map(probe)).catch(()=>null);
+  if(ip){if(ip===location.hostname)connect();else location.replace('http://'+ip+'/cruscotto');break}
+ }
+ searching=false;
+}
 document.addEventListener('visibilitychange',()=>{if(document.hidden){if(es){es.close();es=null}}else{connect();wake()}});
 
 // ---------- session (map and braking points), only for the map dashboard
@@ -406,7 +436,12 @@ function renderMenu(){const p=document.getElementById('pick');
  p.querySelectorAll('button').forEach(b=>b.onclick=()=>{choose(+b.dataset.i);toggleMenu(true)});
  const app=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone;
  document.getElementById('info').innerHTML='In <b>'+(orient==='por'?'verticale':'orizzontale')+'</b> si apre <b>'+DRAFTS[sel].name+'</b>: verticale e orizzontale ricordano ognuno il proprio cruscotto.'+
-  (app?'':' Per avere solo la barra di stato nera sopra al cruscotto, senza le barre del browser: menu del browser → <b>Aggiungi a schermata Home</b>.')}
+  (app?'':' Per avere solo la barra di stato nera sopra al cruscotto, senza le barre del browser: menu del browser → <b>Aggiungi a schermata Home</b>.')+
+  (fixedNote?' '+fixedNote:'')}
+// Without a fixed address the icon on the home screen stops working when the
+// address changes: say so in the menu (once per page load).
+let fixedNote='';
+fetch('/api/status').then(r=>r.json()).then(s=>{net={ip:s.ip,mask:s.mask};if(!s.fixed){fixedNote='L\'indirizzo della striscia ('+s.ip+') può cambiare: prima di aggiungere alla Home fissalo in <b>Telemetria completa → Sistema → Indirizzo fisso</b>.';renderMenu()}}).catch(()=>{});
 document.getElementById('close').onclick=()=>toggleMenu(false);
 document.getElementById('fs').onclick=()=>{const d=document.documentElement;
  if(document.fullscreenElement){document.exitFullscreen().catch(()=>{})}
