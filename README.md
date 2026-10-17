@@ -84,11 +84,13 @@ Nel gioco: **Impostazioni → Telemetria**
 | Telemetria UDP | Attiva |
 | Modalità broadcast UDP | **Attiva** (così ricevono schermo e striscia insieme) |
 | Porta UDP | 20777 |
-| Frequenza di invio UDP | 60 Hz (se la striscia scatta, 30 Hz) |
+| Frequenza di invio UDP | 30 Hz (60 Hz solo su una rete veloce: sull'hotspot dell'iPhone i pacchetti arrivano in ritardo) |
 | Formato UDP | 2025 (vanno bene anche 2024 e, con il Season Pack, 2026) |
 | Telemetria dell'auto | Pubblica, se giochi online |
 
-Se la riga gialla sulla schermata di attesa resta su *nessun dato*, il broadcast non arriva (alcuni router non lo passano dalla console al Wi-Fi): spegni la modalità broadcast e scrivi come **indirizzo IP** quello della striscia (meglio, se ha l'indirizzo fisso: sull'hotspot dell'iPhone 172.20.10.14) oppure quello dello schermo (è nella stessa riga). Schermo e striscia si inoltrano i dati sulla porta 20778, quindi ricevono comunque tutti e due; lo schermo saluta la striscia ogni 2 secondi perché sappia a chi inoltrare (campo `screen` di `/api/status`).
+Se la riga gialla sulla schermata di attesa resta su *nessun dato*, il broadcast non arriva (alcuni router non lo passano dalla console al Wi-Fi): spegni la modalità broadcast e scrivi come **indirizzo IP** quello dello **schermo** (è nella stessa riga; sull'hotspot dell'iPhone è sempre 172.20.10.13, la striscia .14). Lo schermo, che ha due processori, riceve i pacchetti grossi del gioco e passa alla striscia solo l'auto già decodificata (un pacchetto piccolo per campione) sulla porta 20778. Va anche al contrario, con l'IP della striscia. Lo schermo saluta la striscia ogni 2 secondi perché sappia a chi inoltrare (campo `screen` di `/api/status`).
+
+**GT7 sull'hotspot dell'iPhone**: l'hotspot non porta il broadcast con cui schermo e striscia chiamano la PS5. Ora la chiamano anche direttamente (l'indirizzo lo imparano da GT7 o da F1 25) e, finché GT7 tace, provano a turno gli indirizzi della rete.
 
 Sullo schermo la connessione è **GT7 / F1 25** (la stessa di GT7: ascolta i due giochi insieme). La striscia ascolta sempre tutti e due. Il contagiri usa le luci di cambiata del gioco: dove si accende la prima e dove si accendono tutte lo impara nei primi allunghi. Sullo schermo la posizione mostrata è quella in gara; i circuiti salvati sono per scuderia. Il decodificatore ([`lib/F1Udp`](firmware/dashboard/lib/F1Udp/F1Decoder.h)) è condiviso dai due firmware e provato da [test](firmware/dashboard/tests/f1_decoder.cpp) con pacchetti costruiti byte per byte e da una gara simulata che passa per l'analisi della striscia.
 

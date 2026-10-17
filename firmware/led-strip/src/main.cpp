@@ -20,7 +20,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.3.3"
+#define LED_FIRMWARE_VERSION "2.4.0"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -62,6 +62,7 @@ bool trackFilesReady = false;
 int32_t lastPacketId = -1;
 // Ultimo pacchetto di GT7: readData() ripete l'ultimo finché non ne arriva uno nuovo
 int32_t lastGt7PacketId = -1;
+unsigned long lastGt7PacketMs = 0;
 
 // ==================== F1 25 ====================
 // Ascoltato insieme a GT7 sulla porta 20777: in F1 25 Impostazioni >
@@ -547,6 +548,7 @@ static void readTelemetry()
         const PacketC &d = packet.packetContent;
         if (d.magic != 0x47375330 || d.packetId == lastGt7PacketId) break;
         lastGt7PacketId = d.packetId;
+        lastGt7PacketMs = millis();
         Race::Packet p;
         copyPacket(d, gt7Telem.getCurrentGearFromByte(), gt7Telem.getSuggestedGearFromByte(), p);
         useSample(p);
@@ -765,11 +767,15 @@ void loop()
         }
     }
 
-    // Heartbeat periodico verso la PS5
+    // Heartbeat periodico verso la PS5: ogni 10 s mentre GT7 trasmette,
+    // ogni secondo quando tace. Va anche alla PS5 stessa (nota da GT7 o da
+    // F1 25) e, finché GT7 tace, agli indirizzi della rete a turno:
+    // l'hotspot dell'iPhone non porta il broadcast.
     static unsigned long lastHeartbeat = 0;
-    if (millis() - lastHeartbeat > 10000)
+    const bool gt7Receiving = lastGt7PacketMs > 0 && millis() - lastGt7PacketMs < 3000;
+    if (millis() - lastHeartbeat > (gt7Receiving ? 10000UL : 1000UL))
     {
-        gt7Telem.sendHeartbeat();
+        gt7Telem.sendHeartbeats(f1Telem.gameAddress(), gt7Receiving);
         lastHeartbeat = millis();
     }
 }

@@ -1,3 +1,4 @@
+#include <WiFi.h>
 #include <WiFiUdp.h>
 #include "GT7UDPParser.h"
 #include "Salsa20.h"
@@ -38,9 +39,30 @@ void GT7_UDP_Parser::begin(const IPAddress playstationIP, const char packetVersi
 }
 
 void GT7_UDP_Parser::sendHeartbeat(void) {
-    Udp.beginPacket(remoteIP, remotePort);
+    sendHeartbeatTo(remoteIP);
+}
+
+void GT7_UDP_Parser::sendHeartbeatTo(const IPAddress &address) {
+    Udp.beginPacket(address, remotePort);
     Udp.write(heartbeatMsg);
     Udp.endPacket();
+}
+
+void GT7_UDP_Parser::sendHeartbeats(const IPAddress &hint, bool receiving) {
+    sendHeartbeatTo(remoteIP);
+    const IPAddress console = sender != IPAddress() ? sender : hint;
+    if (console != IPAddress() && console != remoteIP) sendHeartbeatTo(console);
+    if (receiving) return;
+    // 16 addresses each time, only on networks up to 254 hosts.
+    const IPAddress local = WiFi.localIP(), mask = WiFi.subnetMask();
+    if (!(mask[0] == 255 && mask[1] == 255 && mask[2] == 255)) return;
+    const uint16_t first = (local[3] & mask[3]) + 1;
+    const uint16_t last = (local[3] & mask[3]) + static_cast<uint8_t>(~mask[3]) - 1;
+    for (int i = 0; i < 16 && last >= first; ++i) {
+        if (sweepHost < first || sweepHost > last) sweepHost = first;
+        const IPAddress target(local[0], local[1], local[2], static_cast<uint8_t>(sweepHost++));
+        if (target != local) sendHeartbeatTo(target);
+    }
 }
 
 uint8_t GT7_UDP_Parser::getCurrentGearFromByte(void) {
@@ -173,6 +195,7 @@ Packet GT7_UDP_Parser::readData() {
     uint32_t magic = 0;
     memcpy(&magic, decryptedData.data(), sizeof(magic));
     if (magic != 0x47375330) return packet;
+    sender = Udp.remoteIP();
     // Zero fields absent in shorter packet variants instead of retaining old data.
     memset(&packet.packetContent, 0, sizeof(packet.packetContent));
     memcpy(&packet.packetContent, decryptedData.data(), byteStream);

@@ -1739,7 +1739,15 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
         uint32_t now = millis();
         if (!firstRun && gt7TransportReady && telemetry.mode != TelemetryMode::SimHub && WiFi.status() == WL_CONNECTED) {
             static uint32_t lastHeartbeat = 0;
-            if (uint32_t(now - lastHeartbeat) >= 500) { lastHeartbeat = now; gt7Telem.sendHeartbeat(); }
+            if (uint32_t(now - lastHeartbeat) >= 500)
+            {
+                lastHeartbeat = now;
+                // Also straight to the PS5 (known from GT7 or F1 25) and, while
+                // GT7 is silent, to the network in turn: the iPhone hotspot does
+                // not carry the broadcast heartbeat.
+                const bool gt7Receiving = hasReceivedGT7Packet && uint32_t(now - lastGT7PacketTime) < 3000;
+                gt7Telem.sendHeartbeats(f1Telem.gameAddress(), gt7Receiving);
+            }
             gt7Dirty = readGT7Wifi(gt7State) || gt7Dirty;
             gt7Dirty = readF1Wifi(gt7State) || gt7Dirty;
         }

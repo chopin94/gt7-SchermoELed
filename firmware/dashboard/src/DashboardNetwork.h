@@ -49,7 +49,7 @@ private:
         std::vector<const char *> menu = {"wifi", "info", "exit"};
         manager.setMenu(menu);
         TelemetryMode mode = TelemetryMode::SimHub;
-        bool enabled = false, offerSetup = false, portalWasActive = false;
+        bool enabled = false, offerSetup = false, portalWasActive = false, hotspotAddressSet = false;
         uint32_t attemptTime = 0, offlineSince = 0;
         const auto stopPortal = [&]() {
             if (manager.getConfigPortalActive()) manager.stopConfigPortal();
@@ -101,6 +101,15 @@ private:
             const bool portalActive = manager.getConfigPortalActive();
             const bool connected = enabled && WiFi.status() == WL_CONNECTED;
             if (connected) { offerSetup = false; offlineSince = millis(); }
+            // iPhone hotspot: always 172.20.10.13 (the LED strip takes .14),
+            // so the address written in F1 25 stays valid at every connection.
+            if (!connected) hotspotAddressSet = false;
+            else if (!hotspotAddressSet) {
+                hotspotAddressSet = true;
+                const IPAddress gateway(172, 20, 10, 1), mask(255, 255, 255, 240), fixed(172, 20, 10, 13);
+                if (WiFi.gatewayIP() == gateway && WiFi.subnetMask() == mask && WiFi.localIP() != fixed)
+                    WiFi.config(fixed, gateway, mask, gateway);
+            }
             // A portal that closed without a connection (timeout or failed
             // save) hands over to the saved network again before reopening.
             if (portalWasActive && !portalActive && !connected) {

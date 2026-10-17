@@ -8,12 +8,13 @@
 
 // Listens to F1 25 on UDP 20777 (broadcast or sent to this address) and
 // hands over the player's car, one sample per car telemetry packet.
-// Screen and LED strip pass every datagram from the game on to each other
-// (setRelay): then F1 25 may send to one address alone, without broadcast,
-// which some networks do not carry. The copies go to RELAY_PORT, so each
-// device tells them from what it receives itself and uses them only when
-// nothing arrives directly. The screen says hello on RELAY_PORT every two
-// seconds, so the strip learns where the screen is (peer()).
+// Screen and LED strip pass the car on to each other (setRelay): then F1 25
+// may send to one address alone, without broadcast, which some networks do
+// not carry. Only the decoded car travels (one small datagram per sample,
+// instead of the ~7 large packets of the game for 22 cars), to RELAY_PORT,
+// so each device tells it from what it receives itself and uses it only
+// when nothing arrives directly. The screen says hello on RELAY_PORT every
+// two seconds, so the strip learns where the screen is (peer()).
 class F1UdpReceiver
 {
 public:
@@ -22,7 +23,7 @@ public:
     explicit F1UdpReceiver(uint16_t listenPort = F1Udp::PORT) : port(listenPort) {}
     void begin() { udp.begin(port); }
     void stop() { udp.stop(); }
-    // Where to copy the datagrams from the game (none: IPAddress()).
+    // Where to copy the decoded car (none: IPAddress()).
     void setRelay(const IPAddress &address) { relay = address; }
     // The screen to the strip: "here I am, copy F1 25 to me too".
     void sayHello(const IPAddress &address)
@@ -33,6 +34,9 @@ public:
     }
     // Who said hello in the last 10 seconds (IPAddress() if nobody).
     IPAddress peer() const { return peerSeen && millis() - peerMs < 10000 ? peerAddress : IPAddress(); }
+    // The console that sends F1 25 here (IPAddress() until it does): GT7
+    // runs on the same one, its heartbeat can go there directly.
+    IPAddress gameAddress() const { return gameSender; }
 
     // Reads the waiting datagrams until a new sample is complete. Call it
     // again until it returns false: the lap analysis wants every sample.
@@ -52,19 +56,31 @@ public:
                 continue;
             }
             countDatagram(length);
-            if (relay != IPAddress() && udp.remoteIP() != relay)
+            if (length == RELAYED_SIZE && memcmp(buffer, relayedMagic(), 4) == 0)
             {
-                udp.beginPacket(relay, RELAY_PORT);
-                udp.write(buffer, static_cast<size_t>(length));
-                udp.endPacket();
+                // A car decoded by the other device: our own clock.
+                memcpy(&car, buffer + 4, sizeof(F1Udp::Car));
+                const int32_t tick = static_cast<int32_t>(static_cast<uint64_t>(millis()) * 3 / 50);
+                car.clock60 = relayClockStarted && tick <= relayClock ? relayClock + 1 : tick;
+                relayClock = car.clock60;
+                relayClockStarted = true;
+                lastFormat = 2025;
+                return accept(car);
             }
+            if (length >= 2) lastFormat = buffer[0] | (buffer[1] << 8);
+            gameSender = udp.remoteIP();
             if (decoder.feed(buffer, static_cast<size_t>(length), millis(), car))
             {
-                lastSampleMs = millis();
-                received = true;
-                lastOnTrack = car.onTrack;
-                lastPaused = car.paused;
-                return true;
+                if (relay != IPAddress() && gameSender != relay)
+                {
+                    uint8_t out[RELAYED_SIZE];
+                    memcpy(out, relayedMagic(), 4);
+                    memcpy(out + 4, &car, sizeof(F1Udp::Car));
+                    udp.beginPacket(relay, RELAY_PORT);
+                    udp.write(out, sizeof(out));
+                    udp.endPacket();
+                }
+                return accept(car);
             }
         }
         return false;
@@ -96,9 +112,14 @@ public:
 private:
     static const char *hello() { return "GT7DASH-F1"; }
     static const int HELLO_LENGTH = 10;
+    // "F1C" + layout version, then the Car as it is in memory: screen and
+    // strip are both Xtensa ESP32 builds of this same header.
+    static const char *relayedMagic() { return "F1C1"; }
+    static const int RELAYED_SIZE = 4 + static_cast<int>(sizeof(F1Udp::Car));
+
     WiFiUDP udp;
     uint16_t port;
-    IPAddress relay, peerAddress;
+    IPAddress relay, peerAddress, gameSender;
     uint32_t peerMs = 0;
     bool peerSeen = false;
     F1Udp::Decoder decoder;
@@ -106,18 +127,28 @@ private:
     uint32_t lastSampleMs = 0;
     bool received = false;
     bool lastOnTrack = false, lastPaused = false;
+    int32_t relayClock = 0;
+    bool relayClockStarted = false;
     // Datagrams per second, the packet format of the last one.
     uint32_t lastDatagramMs = 0, windowStartMs = 0, windowCount = 0;
     float rate = 0;
     bool datagramsEver = false;
     uint16_t lastFormat = 0;
 
+    bool accept(const F1Udp::Car &car)
+    {
+        lastSampleMs = millis();
+        received = true;
+        lastOnTrack = car.onTrack;
+        lastPaused = car.paused;
+        return true;
+    }
+
     void countDatagram(int length)
     {
         const uint32_t now = millis();
         if (length > 0)
         {
-            if (length >= 2) lastFormat = buffer[0] | (buffer[1] << 8);
             lastDatagramMs = now;
             datagramsEver = true;
             windowCount++;

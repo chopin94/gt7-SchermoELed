@@ -118,6 +118,14 @@ class GT7_UDP_Parser {
     public:
 		void begin(const IPAddress playstationIP, const char packetVersion = 'A');
 		void sendHeartbeat();
+		// The heartbeat also to the console itself and, while nothing
+		// arrives, to the addresses of the local network in turn: on
+		// networks that do not carry broadcasts (the iPhone hotspot) the
+		// broadcast heartbeat alone never reaches the PS5. `hint` is the
+		// console's address if known from elsewhere (F1 25), else IPAddress().
+		void sendHeartbeats(const IPAddress &hint, bool receiving);
+		// Who sent the last valid packet (the PS5), IPAddress() before.
+		IPAddress senderIP() const { return sender; }
         void stop() { Udp.stop(); packet = {}; }
         uint8_t getFlag(int index);
         uint8_t getCurrentGearFromByte(void);
@@ -129,6 +137,9 @@ class GT7_UDP_Parser {
     private: 
         WiFiUDP Udp;
         IPAddress remoteIP;
+        IPAddress sender;
+        uint16_t sweepHost = 1;
+        void sendHeartbeatTo(const IPAddress &address);
         Packet packet = {};
         int iv2;
         char detectedPacketVersion;
