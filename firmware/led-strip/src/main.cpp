@@ -20,7 +20,7 @@
 #include "../../dashboard/src/LittleFsStorage.h"
 
 // ==================== FIRMWARE ====================
-#define LED_FIRMWARE_VERSION "2.3.0"
+#define LED_FIRMWARE_VERSION "2.3.1"
 // Nome in rete: http://gt7led.local (mDNS) e nome DHCP sul router
 #define LED_HOSTNAME "gt7led"
 // Nome controllato dall'aggiornamento via Wi-Fi: accetta solo un firmware.bin
@@ -243,7 +243,7 @@ void handleApiStatus()
     const LedFx::Layout &l = effects.layout();
     const Race::Packet &p = race.packet();
     const uint32_t now = millis();
-    static char buffer[1400];
+    static char buffer[1600];
     JsonOut j(buffer, sizeof(buffer));
     j.beginObject();
     j.text("app", "gt7led"); // per la ricerca automatica del cruscotto
@@ -259,6 +259,9 @@ void handleApiStatus()
     j.field("fixedNets", static_cast<long long>(savedNetworks));
     j.text("suggest", suggestedAddress().toString().c_str());
     j.key("gt7").boolean(race.racing(now));
+    char f1State[48];
+    f1Telem.describe(f1State, sizeof(f1State));
+    j.text("f1", f1State); // cosa arriva da F1 25: si vede subito un'impostazione sbagliata
     j.field("rpm", race.live(now) ? p.rpm : 0.0f, 0);
     j.field("maxRpm", race.live(now) ? p.maxAlertRpm : 0.0f, 0);
     j.field("speed", race.live(now) ? p.speed : 0.0f, 2);

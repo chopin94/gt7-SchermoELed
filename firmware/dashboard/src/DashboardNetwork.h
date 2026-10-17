@@ -69,6 +69,9 @@ private:
                     if (!enabled) WiFi.mode(WIFI_OFF);
                     else {
                         WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true);
+                        // Always awake: in modem sleep most broadcast packets
+                        // (F1 25 sends them) are lost between two beacons.
+                        WiFi.setSleep(false);
                         attemptTime = offlineSince = millis();
                         if (dashboardHasSavedWifi()) WiFi.begin();
                         else if (offerSetup) { startPortal(); offerSetup = false; }
@@ -87,6 +90,7 @@ private:
                     enabled = true;
                     WiFi.mode(WIFI_STA);
                     WiFi.setAutoReconnect(true);
+                    WiFi.setSleep(false);
                     startPortal(); offerSetup = false;
                 } else {
                     stopPortal(); offerSetup = false;

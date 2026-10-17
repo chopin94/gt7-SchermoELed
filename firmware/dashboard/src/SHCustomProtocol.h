@@ -2172,7 +2172,29 @@ int extractIntFromJson(const String& json, const String& key, int defaultVal) {
 			lastLedStripFound = ledStripFound;
 			drawConnectingScreenBase();
 			connectingScreenActive = true;
+			lastF1Line[0] = 0;
 		}
+		drawF1Diagnostics();
+	}
+
+	// GT7 / F1 25 mode: one line above the address with what arrives from
+	// F1 25, so a wrong setting in the game is seen at once.
+	char lastF1Line[48] = {};
+	uint32_t lastF1LineMs = 0;
+	void drawF1Diagnostics()
+	{
+		if (telemetry.mode != TelemetryMode::GT7 || WiFi.status() != WL_CONNECTED) return;
+		if (lastF1Line[0] && millis() - lastF1LineMs < 1000) return;
+		lastF1LineMs = millis();
+		char line[48];
+		f1Telem.describe(line, sizeof(line));
+		if (strcmp(line, lastF1Line) == 0) return;
+		strcpy(lastF1Line, line);
+		tft.fillRect(0, SCREEN_HEIGHT - 30, SCREEN_WIDTH, 14, TFT_BLACK);
+		tft.setTextDatum(MC_DATUM);
+		tft.setTextPadding(0);
+		tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+		tft.drawCentreString(line, SCREEN_WIDTH / 2, SCREEN_HEIGHT - 27, 1);
 	}
 
 	bool isActiveValue(String value)
