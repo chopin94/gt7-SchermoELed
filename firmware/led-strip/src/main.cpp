@@ -101,11 +101,14 @@ static void clearFixedSlot(int slot)
 
 // Hotspot dell'iPhone: rete 172.20.10.0/28, gli indirizzi si danno da .2 in
 // su in ordine di collegamento, quindi .14 è l'ultimo che l'iPhone usa.
+static bool onIphoneHotspot()
+{
+    return WiFi.gatewayIP() == IPAddress(172, 20, 10, 1) && WiFi.subnetMask() == IPAddress(255, 255, 255, 240);
+}
+
 static IPAddress suggestedAddress()
 {
-    if (WiFi.gatewayIP() == IPAddress(172, 20, 10, 1) && WiFi.subnetMask() == IPAddress(255, 255, 255, 240))
-        return IPAddress(172, 20, 10, 14);
-    return WiFi.localIP();
+    return onIphoneHotspot() ? IPAddress(172, 20, 10, 14) : WiFi.localIP();
 }
 
 // Dopo la connessione con DHCP: se per questa rete c'è un indirizzo fisso,
@@ -113,8 +116,17 @@ static IPAddress suggestedAddress()
 static void applyFixedAddress()
 {
     const int slot = fixedSlot();
-    if (slot < 0) return;
-    const IPAddress ip(preferences.getUInt(fixedKey(slot, "ip").c_str(), 0));
+    IPAddress ip;
+    if (slot >= 0) ip = IPAddress(preferences.getUInt(fixedKey(slot, "ip").c_str(), 0));
+    // Sull'hotspot dell'iPhone da sola, senza sceglierlo: l'icona del
+    // cruscotto sulla Home si apre sempre (si spegne con "Torna automatico").
+    else if (onIphoneHotspot() && !preferences.getBool("hot_off", false)) ip = suggestedAddress();
+    else return;
+    if (ip == WiFi.localIP())
+    {
+        fixedAddressActive = true;
+        return;
+    }
     if (WiFi.config(ip, WiFi.gatewayIP(), WiFi.subnetMask(), WiFi.dnsIP()))
     {
         fixedAddressActive = true;
@@ -225,6 +237,7 @@ void handleApiStatus()
     static char buffer[1400];
     JsonOut j(buffer, sizeof(buffer));
     j.beginObject();
+    j.text("app", "gt7led"); // per la ricerca automatica del cruscotto
     j.flag("wifi", WiFi.status() == WL_CONNECTED);
     j.text("ip", WiFi.localIP().toString().c_str());
     j.text("host", LED_HOSTNAME ".local");
@@ -269,6 +282,8 @@ void handleApiStatus()
     j.field("tracks", static_cast<long long>(trackFilesReady ? trackStore.trackCount() : -1));
     j.field("clients", static_cast<long long>(stream.count() + dashStream.count()));
     j.endObject();
+    // La ricerca automatica del cruscotto la chiede da un altro indirizzo
+    server.sendHeader("Access-Control-Allow-Origin", "*");
     sendJson(j);
 }
 
@@ -385,6 +400,7 @@ void handleApiNetwork()
     if (value == "auto")
     {
         if (slot >= 0) clearFixedSlot(slot);
+        if (onIphoneHotspot()) preferences.putBool("hot_off", true);
     }
     else
     {
@@ -405,6 +421,7 @@ void handleApiNetwork()
         preferences.putUInt(fixedKey(slot, "ip").c_str(), uint32_t(ip));
         preferences.putUInt(fixedKey(slot, "gw").c_str(), uint32_t(WiFi.gatewayIP()));
         preferences.putUInt(fixedKey(slot, "mk").c_str(), mask);
+        preferences.remove("hot_off");
     }
     server.send(200, "text/plain", "OK");
     delay(500);

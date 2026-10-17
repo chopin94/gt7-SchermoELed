@@ -275,7 +275,7 @@ input[type=color]{width:100%;height:38px;border:0;background:none;padding:0}
     <button class="btn" id="fixset">Usa sempre questo</button>
     <button class="btn sec2" id="fixauto">Torna automatico</button>
    </div>
-   <p class="note">Con l'indirizzo fisso il cruscotto aggiunto alla schermata Home si apre sempre, anche dove <b>gt7led.local</b> non funziona (l'hotspot dell'iPhone). Vale solo per questa rete (stesso nome e stesso router, fino a 4 reti ricordate): su un'altra, o su un hotspot che cambia indirizzi a ogni accensione, la striscia usa quello dato dal router. Sull'hotspot dell'iPhone il suggerito è 172.20.10.14, l'ultimo che l'iPhone assegna. Su un router di casa scegline uno fuori dagli indirizzi che il router distribuisce, oppure riservalo nel router.</p>
+   <p class="note">Con l'indirizzo fisso il cruscotto aggiunto alla schermata Home si apre sempre, anche dove <b>gt7led.local</b> non funziona (l'hotspot dell'iPhone). Vale solo per questa rete (stesso nome e stesso router, fino a 4 reti ricordate): su un'altra, o su un hotspot che cambia indirizzi a ogni accensione, la striscia usa quello dato dal router. Sull'hotspot dell'iPhone la striscia usa già da sola 172.20.10.14, l'ultimo che l'iPhone assegna (<i>Torna automatico</i> lo spegne). Su un router di casa scegline uno fuori dagli indirizzi che il router distribuisce, oppure riservalo nel router.</p>
   </div>
   <div class="card c6">
    <h2>Manutenzione</h2>
